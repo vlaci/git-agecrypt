@@ -1,0 +1,15 @@
+[package]
+name = "git-agenix"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+age = { version = "0.7.0", features = [ "cli-common", "armor", "ssh", "plugin" ] }
+anyhow = { version = "1.0.52", features = ["backtrace"] }
+clap = { version = "3.0.0-rc.8", features = [ "derive" ] }
+lazy_static = "1.4.0"
+rnix = "0.10.1"
+serde_json = "1.0.73"
+thiserror = "1.0.30"
