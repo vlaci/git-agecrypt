@@ -9,7 +9,9 @@ edition = "2021"
 age = { version = "0.7.0", features = [ "cli-common", "armor", "ssh", "plugin" ] }
 anyhow = { version = "1.0.52", features = ["backtrace"] }
 clap = { version = "3.0.0-rc.8", features = [ "derive" ] }
+git2 = "0.13.25"
 lazy_static = "1.4.0"
 rnix = "0.10.1"
 serde_json = "1.0.73"
-thiserror = "1.0.30"
+
+[features]

@@ -1,5 +1,4 @@
 use std::{
-    env,
     fs::{self, File},
     io::{self, Read, Seek, Write},
     path::{Path, PathBuf},
@@ -9,21 +8,29 @@ use anyhow::{anyhow, bail, Result};
 
 mod age;
 mod cli;
+mod git;
 mod nix;
 
 fn main() -> Result<()> {
     let cli = cli::parse_args();
+    let repo = git::Repository::from_current_dir()?;
 
-    let result = match cli.command {
-        cli::Commands::Clean { secrets_nix, file } => clean(&secrets_nix, &file),
+    match cli.command {
+        cli::Commands::Clean { secrets_nix, file } => clean(repo, &secrets_nix, &file),
         cli::Commands::Smudge { identities } => smudge(&identities),
         cli::Commands::Textconv { identities, path } => textconv(&identities, &path),
     }?;
     Ok(())
 }
 
-fn clean(secrets_nix: impl AsRef<Path>, file: impl AsRef<Path>) -> Result<Vec<u8>> {
+fn clean(
+    repo: git::Repository,
+    secrets_nix: impl AsRef<Path>,
+    file: impl AsRef<Path>,
+) -> Result<Vec<u8>> {
+    let file = repo.workdir().join(file);
     let rule = load_rule_for(secrets_nix, file)?;
+
     age::encrypt(&rule.public_keys, &mut io::stdin())
 }
 
@@ -56,9 +63,7 @@ struct AgenixRule {
 
 fn load_rule_for(rules_path: impl AsRef<Path>, for_file: impl AsRef<Path>) -> Result<AgenixRule> {
     let val = nix::eval_file(&rules_path)?;
-
     let dir = fs::canonicalize(rules_path.as_ref().parent().unwrap())?;
-    let for_file = env::current_dir()?.join(for_file);
 
     for (pth, v) in val
         .as_object()
@@ -66,7 +71,7 @@ fn load_rule_for(rules_path: impl AsRef<Path>, for_file: impl AsRef<Path>) -> Re
         .iter()
     {
         let abs_path = dir.join(pth);
-        if abs_path != for_file {
+        if abs_path != for_file.as_ref() {
             continue;
         }
         let public_keys = v
@@ -93,6 +98,6 @@ fn load_rule_for(rules_path: impl AsRef<Path>, for_file: impl AsRef<Path>) -> Re
     bail!(
         "No rule in {} for {}",
         rules_path.as_ref().to_string_lossy(),
-        for_file.to_string_lossy()
+        for_file.as_ref().to_string_lossy()
     );
 }
