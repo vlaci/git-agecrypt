@@ -30,6 +30,10 @@ pub(crate) enum Commands {
     Smudge {
         #[clap(short, long)]
         identities: Vec<String>,
+
+        /// File to smudge
+        #[clap(short, long)]
+        file: PathBuf,
     },
 
     // Decrypt files for diff

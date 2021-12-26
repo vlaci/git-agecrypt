@@ -20,7 +20,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         cli::Commands::Clean { secrets_nix, file } => clean(repo, &secrets_nix, &file),
-        cli::Commands::Smudge { identities } => smudge(&identities),
+        cli::Commands::Smudge { identities, file } => smudge(repo, &identities, &file),
         cli::Commands::Textconv { identities, path } => textconv(&identities, &path),
     }?;
     Ok(())
@@ -74,11 +74,28 @@ fn clean(
     Ok(io::stdout().write_all(&result)?)
 }
 
-fn smudge(identities: &[impl AsRef<Path>]) -> Result<Vec<u8>> {
+fn smudge(
+    repo: git::Repository,
+    identities: &[impl AsRef<Path>],
+    file: impl AsRef<Path>,
+) -> Result<()> {
     log::info!("Decrypting file");
+    let file = repo.workdir().join(file);
+
     if let Some(rv) = age::decrypt(identities, &mut io::stdin())? {
         log::info!("Decrypted file");
-        Ok(rv)
+        let sidecar = repo.get_sidecar(&file, "hash")?;
+        let mut hasher = blake3::Hasher::new();
+        let hash = hasher.update(&rv).finalize();
+
+        log::debug!(
+            "Storing hash for file; hash={:?} sidecar={:?}",
+            hash.to_hex().as_str(),
+            sidecar
+        );
+        File::create(sidecar)?.write_all(hash.as_bytes())?;
+
+        Ok(io::stdout().write_all(&rv)?)
     } else {
         bail!("Input isn't encrypted")
     }
