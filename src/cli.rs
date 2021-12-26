@@ -15,6 +15,12 @@ pub(crate) struct Args {
 
 #[derive(Subcommand)]
 pub(crate) enum Commands {
+    /// Set-up repository for use with git-agenix
+    Init,
+
+    /// Remove repository specific configuration
+    Deinit,
+
     /// Encrypt files for commit
     Clean {
         /// Path to secrets.nix

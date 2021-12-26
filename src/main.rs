@@ -19,6 +19,8 @@ fn main() -> Result<()> {
     let repo = git::Repository::from_current_dir()?;
 
     match cli.command {
+        cli::Commands::Init => init(repo),
+        cli::Commands::Deinit => deinit(repo),
         cli::Commands::Clean { secrets_nix, file } => clean(repo, &secrets_nix, &file),
         cli::Commands::Smudge { identities, file } => smudge(repo, &identities, &file),
         cli::Commands::Textconv { identities, path } => textconv(&identities, &path),
@@ -115,6 +117,17 @@ fn textconv(identities: &[impl AsRef<Path>], path: impl AsRef<Path>) -> Result<(
         buff
     };
     Ok(io::stdout().write_all(&result)?)
+}
+
+fn init(repo: git::Repository) -> Result<()> {
+    repo.configure_filter()?;
+    Ok(())
+}
+
+fn deinit(repo: git::Repository) -> Result<()> {
+    repo.deconfigure_filter()?;
+    repo.remove_sidecar_files()?;
+    Ok(())
 }
 
 #[derive(Debug)]
