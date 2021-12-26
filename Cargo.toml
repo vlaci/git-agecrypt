@@ -8,10 +8,11 @@ edition = "2021"
 [dependencies]
 age = { version = "0.7.0", features = [ "cli-common", "armor", "ssh", "plugin" ] }
 anyhow = { version = "1.0.52", features = ["backtrace"] }
+blake3 = "1.2.0"
 clap = { version = "3.0.0-rc.8", features = [ "derive" ] }
+env_logger = "0.9.0"
 git2 = "0.13.25"
-lazy_static = "1.4.0"
-rnix = "0.10.1"
+log = "0.4.14"
 serde_json = "1.0.73"
 
 [features]
