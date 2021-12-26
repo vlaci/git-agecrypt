@@ -9,19 +9,13 @@ use age::{
     plugin::{self, RecipientPluginV1},
     DecryptError, Decryptor, Encryptor, Identity, Recipient,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 pub(crate) fn decrypt(
     identities: &[impl AsRef<Path>],
     encrypted: &mut impl Read,
 ) -> Result<Option<Vec<u8>>> {
-    let id = read_identities(
-        identities
-            .iter()
-            .map(|i| i.as_ref().to_string_lossy().into())
-            .collect(),
-        None,
-    )?;
+    let id = load_identities(identities)?;
     let id = id.iter().map(|i| i.as_ref() as &dyn Identity);
     let mut decrypted = vec![];
     let decryptor = match Decryptor::new(ArmoredReader::new(encrypted)) {
@@ -34,6 +28,16 @@ pub(crate) fn decrypt(
     let mut reader = decryptor.decrypt(id)?;
     reader.read_to_end(&mut decrypted)?;
     Ok(Some(decrypted))
+}
+
+fn load_identities(identities: &[impl AsRef<Path>]) -> Result<Vec<Box<dyn Identity>>> {
+    let id: Vec<String> = identities
+        .iter()
+        .map(|i| i.as_ref().to_string_lossy().into())
+        .collect();
+    let rv = read_identities(id.clone(), None)
+        .with_context(|| format!("Loading identities failed from paths: {:?}", id))?;
+    Ok(rv)
 }
 
 pub(crate) fn encrypt(
@@ -68,4 +72,9 @@ pub(crate) fn encrypt(
     io::copy(cleartext, &mut writer)?;
     writer.finish()?;
     Ok(encrypted)
+}
+
+pub(crate) fn validate_identity(identity: impl AsRef<Path>) -> Result<()> {
+    read_identities(vec![identity.as_ref().to_string_lossy().into()], None)?;
+    Ok(())
 }

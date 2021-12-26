@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use clap::{AppSettings, Parser, Subcommand};
+use clap::{AppSettings, Args, Parser, Subcommand};
+
+use crate::commands::public::ConfigCommand;
 
 /// Transparently encrypt/decrypt age secrets
 #[derive(Parser)]
@@ -8,17 +10,25 @@ use clap::{AppSettings, Parser, Subcommand};
 #[clap(global_setting(AppSettings::UseLongFormatForHelpSubcommand))]
 #[clap(global_setting(AppSettings::DeriveDisplayOrder))]
 #[clap(setting(AppSettings::SubcommandRequiredElseHelp))]
-pub(crate) struct Args {
+pub(crate) struct CliArgs {
     #[clap(subcommand)]
     pub command: Commands,
 }
 
 #[derive(Subcommand)]
-#[clap(after_help = "In addition to the above, The following subcommands are used from git filters:
-    clean, smudge, textconv")]
+#[clap(
+    after_help = "In addition to the above, The following subcommands are used from git filters:
+    clean, smudge, textconv"
+)]
 pub(crate) enum Commands {
     /// Set-up repository for use with git-agenix
     Init,
+
+    /// Configure encryption settings
+    Config {
+        #[clap(flatten)]
+        cfg: Config,
+    },
 
     /// Remove repository specific configuration
     Deinit,
@@ -58,6 +68,35 @@ pub(crate) enum Commands {
     },
 }
 
-pub(crate) fn parse_args() -> Args {
-    Args::parse()
+#[derive(Args)]
+pub(crate) struct Config {
+    /// Register identity usable for decryption
+    #[clap(short, long, group = "config")]
+    add_identity: Option<PathBuf>,
+
+    /// Remove registered identity
+    #[clap(short, long, group = "config")]
+    remove_identity: Option<PathBuf>,
+
+    /// List registered identities
+    #[clap(short, long, group = "config")]
+    list_identities: bool,
+}
+
+impl From<Config> for ConfigCommand {
+    fn from(val: Config) -> Self {
+        if let Some(identity) = val.add_identity {
+            Self::AddIdentity(identity)
+        } else if let Some(identity) = val.remove_identity {
+            Self::RemoveIdentity(identity)
+        } else if val.list_identities {
+            Self::ListIdentities
+        } else {
+            panic!("Misconfigured config parser")
+        }
+    }
+}
+
+pub(crate) fn parse_args() -> CliArgs {
+    CliArgs::parse()
 }

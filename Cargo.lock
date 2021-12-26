@@ -613,6 +613,7 @@ dependencies = [
  "env_logger",
  "git2",
  "log",
+ "regex",
  "serde_json",
 ]
 

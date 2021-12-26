@@ -10,6 +10,8 @@ pub(crate) struct Repository {
     inner: git2::Repository,
 }
 
+const CONFIG_PATH: &str = "git-agenix.config";
+
 impl Repository {
     pub(crate) fn from_current_dir() -> Result<Self> {
         let inner = git2::Repository::discover(env::current_dir()?)?;
@@ -45,6 +47,53 @@ impl Repository {
         let contents = entry.to_object(&self.inner)?;
 
         Ok(contents.as_blob().unwrap().content().into())
+    }
+
+    pub(crate) fn add_config(&self, key: impl AsRef<str>, value: impl AsRef<str>) -> Result<bool> {
+        if self.contains_config(&key, &value) {
+            return Ok(false);
+        }
+
+        let mut cfg = self.inner.config()?;
+        let entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
+
+        cfg.set_multivar(&entry_name, "^$", value.as_ref())?;
+
+        Ok(true)
+    }
+
+    fn contains_config(&self, key: impl AsRef<str>, value: impl AsRef<str>) -> bool {
+        let entries = self.list_config(key).unwrap_or_default();
+        entries.iter().any(|e| e == value.as_ref())
+    }
+
+    pub(crate) fn remove_config(
+        &self,
+        key: impl AsRef<str>,
+        value: impl AsRef<str>,
+    ) -> Result<bool> {
+        if !self.contains_config(&key, &value) {
+            return Ok(false);
+        }
+
+        let mut cfg = self.inner.config()?;
+        let entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
+
+        let pattern = format!("^{}$", regex::escape(value.as_ref()));
+        cfg.remove_multivar(&entry_name, &pattern)?;
+
+        Ok(true)
+    }
+
+    pub(crate) fn list_config(&self, key: impl AsRef<str>) -> Result<Vec<String>> {
+        let cfg = self.inner.config()?;
+        let entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
+        let entries = cfg
+            .entries(Some(&entry_name))?
+            .filter_map(|e| e.ok().and_then(|e| e.value().map(|e| e.to_owned())))
+            .collect();
+
+        Ok(entries)
     }
 
     pub(crate) fn configure_filter(&self) -> Result<()> {
