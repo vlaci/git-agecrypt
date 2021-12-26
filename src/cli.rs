@@ -14,6 +14,8 @@ pub(crate) struct Args {
 }
 
 #[derive(Subcommand)]
+#[clap(after_help = "In addition to the above, The following subcommands are used from git filters:
+    clean, smudge, textconv")]
 pub(crate) enum Commands {
     /// Set-up repository for use with git-agenix
     Init,
@@ -22,6 +24,7 @@ pub(crate) enum Commands {
     Deinit,
 
     /// Encrypt files for commit
+    #[clap(setting(AppSettings::Hidden))]
     Clean {
         /// Path to secrets.nix
         #[clap(short, long, default_value = "secrets/secrets.nix")]
@@ -33,6 +36,7 @@ pub(crate) enum Commands {
     },
 
     /// Decrypt files from checkout
+    #[clap(setting(AppSettings::Hidden))]
     Smudge {
         #[clap(short, long)]
         identities: Vec<String>,
@@ -43,6 +47,7 @@ pub(crate) enum Commands {
     },
 
     // Decrypt files for diff
+    #[clap(setting(AppSettings::Hidden))]
     Textconv {
         /// Additional identities to use
         #[clap(short, long)]
