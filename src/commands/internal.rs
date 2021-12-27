@@ -10,9 +10,11 @@ use blake3::Hash;
 
 use crate::{age, ctx::Context, git::Repository, nix};
 
-use super::Commands;
+pub(crate) struct CommandContext<C: Context> {
+    pub ctx: C,
+}
 
-impl<C: Context> Commands<C> {
+impl<C: Context> CommandContext<C> {
     pub(crate) fn clean(
         &self,
         secrets_nix: impl AsRef<Path>,

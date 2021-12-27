@@ -4,7 +4,9 @@ use anyhow::{bail, Result};
 
 use crate::{age, ctx::Context, git::Repository};
 
-use super::Commands;
+pub(crate) struct CommandContext<C: Context> {
+    pub ctx: C,
+}
 
 pub(crate) enum ConfigCommand {
     AddIdentity(PathBuf),
@@ -41,7 +43,7 @@ pub(crate) struct StatusResult {
     pub identities: Identities,
 }
 
-impl<C: Context> Commands<C> {
+impl<C: Context> CommandContext<C> {
     pub(crate) fn init(&self) -> Result<()> {
         self.ctx.configure_filter()?;
         Ok(())

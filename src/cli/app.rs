@@ -1,39 +1,54 @@
 use anyhow::Result;
 
 use crate::{
-    commands::{self, public},
+    commands::{internal, public},
     ctx::Context,
 };
 
-use super::args::{Args, Commands};
+use super::args::{Args, Commands, InternalCommands, PublicCommands};
 
 pub(crate) fn run(args: Args, ctx: impl Context) -> Result<()> {
-    let cmd = commands::Commands { ctx };
     match args.command {
-        Commands::Init => {
+        Commands::Public(c) => run_public_command(c, ctx),
+        Commands::Internal(c) => run_internal_command(c, ctx),
+    }
+}
+
+fn run_internal_command(
+    commands: InternalCommands,
+    ctx: impl Context,
+) -> Result<(), anyhow::Error> {
+    let cmd = internal::CommandContext { ctx };
+    match commands {
+        InternalCommands::Clean { secrets_nix, file } => cmd.clean(&secrets_nix, &file),
+        InternalCommands::Smudge { identities, file } => cmd.smudge(&identities, &file),
+        InternalCommands::Textconv { identities, path } => cmd.textconv(&identities, &path),
+    }
+}
+
+fn run_public_command(commands: PublicCommands, ctx: impl Context) -> Result<(), anyhow::Error> {
+    let cmd = public::CommandContext { ctx };
+    match commands {
+        PublicCommands::Init => {
             cmd.init()?;
             print!("Success!");
             Ok(())
         }
-        Commands::Deinit => {
+        PublicCommands::Deinit => {
             cmd.deinit()?;
             println!("Success!");
             Ok(())
         }
-        Commands::Status => {
+        PublicCommands::Status => {
             let status = cmd.status()?;
             print!("{}", status);
             Ok(())
         }
-        Commands::Config { cfg } => {
+        PublicCommands::Config { cfg } => {
             print!("{}", cmd.config(cfg.into())?);
             Ok(())
         }
-        Commands::Clean { secrets_nix, file } => cmd.clean(&secrets_nix, &file),
-        Commands::Smudge { identities, file } => cmd.smudge(&identities, &file),
-        Commands::Textconv { identities, path } => cmd.textconv(&identities, &path),
-    }?;
-    Ok(())
+    }
 }
 
 impl Display for public::ConfigResult {

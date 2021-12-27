@@ -19,6 +19,14 @@ pub struct Args {
     clean, smudge, textconv"
 )]
 pub enum Commands {
+    #[clap(flatten)]
+    Public(PublicCommands),
+    #[clap(flatten)]
+    Internal(InternalCommands),
+}
+
+#[derive(Subcommand)]
+pub enum PublicCommands {
     /// Set-up repository for use with git-agenix
     Init,
 
@@ -33,7 +41,45 @@ pub enum Commands {
 
     /// Remove repository specific configuration
     Deinit,
+}
 
+#[derive(clap::Args)]
+pub struct Config {
+    /// Register identity usable for decryption
+    #[clap(short, long, group = "config")]
+    add_identity: Option<PathBuf>,
+
+    /// Remove registered identity
+    #[clap(short, long, group = "config")]
+    remove_identity: Option<PathBuf>,
+
+    /// List registered identities
+    #[clap(short, long, group = "config")]
+    list_identities: bool,
+}
+
+pub(crate) enum ConfigCommand {
+    AddIdentity(PathBuf),
+    RemoveIdentity(PathBuf),
+    ListIdentities,
+}
+
+impl From<Config> for ConfigCommand {
+    fn from(val: Config) -> Self {
+        if let Some(identity) = val.add_identity {
+            Self::AddIdentity(identity)
+        } else if let Some(identity) = val.remove_identity {
+            Self::RemoveIdentity(identity)
+        } else if val.list_identities {
+            Self::ListIdentities
+        } else {
+            panic!("Misconfigured config parser")
+        }
+    }
+}
+
+#[derive(Subcommand)]
+pub enum InternalCommands {
     /// Encrypt files for commit
     #[clap(setting(AppSettings::Hidden))]
     Clean {
@@ -67,35 +113,6 @@ pub enum Commands {
         /// File to show
         path: PathBuf,
     },
-}
-
-#[derive(clap::Args)]
-pub struct Config {
-    /// Register identity usable for decryption
-    #[clap(short, long, group = "config")]
-    add_identity: Option<PathBuf>,
-
-    /// Remove registered identity
-    #[clap(short, long, group = "config")]
-    remove_identity: Option<PathBuf>,
-
-    /// List registered identities
-    #[clap(short, long, group = "config")]
-    list_identities: bool,
-}
-
-impl From<Config> for ConfigCommand {
-    fn from(val: Config) -> Self {
-        if let Some(identity) = val.add_identity {
-            Self::AddIdentity(identity)
-        } else if let Some(identity) = val.remove_identity {
-            Self::RemoveIdentity(identity)
-        } else if val.list_identities {
-            Self::ListIdentities
-        } else {
-            panic!("Misconfigured config parser")
-        }
-    }
 }
 
 pub fn parse_args() -> Args {
