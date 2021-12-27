@@ -1,11 +1,8 @@
-use std::{
-    fmt::{Display, Formatter},
-};
-
 use anyhow::Result;
 
 use crate::{
-    commands::{internal, public}, ctx::Context,
+    commands::{internal, public},
+    ctx::Context,
 };
 
 use super::args::{Args, Commands};
@@ -56,7 +53,8 @@ impl Display for public::Identities {
         writeln!(f, "The following identities are currently configured:")?;
         for i in &self.0 {
             if let Err(err) = i.is_valid() {
-                writeln!(f,
+                writeln!(
+                    f,
                     "    ⨯ {:padding$} -- {}",
                     i.path,
                     err.to_string(),

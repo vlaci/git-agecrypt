@@ -1,7 +1,4 @@
-use std::{
-    env,
-    path::{Path},
-};
+use std::{env, path::Path};
 
 use anyhow::{bail, Result};
 
@@ -16,17 +13,13 @@ pub(crate) trait Repository {
 
     fn contains_config(&self, key: &str, value: &str) -> bool;
 
-    fn remove_config(
-        &self,
-        key: &str,
-        value: &str,
-    ) -> Result<bool>;
+    fn remove_config(&self, key: &str, value: &str) -> Result<bool>;
+
     fn list_config(&self, key: &str) -> Result<Vec<String>>;
 
     fn get_config(&self, key: &str) -> Option<ConfigValue>;
 
     fn set_config(&self, key: &str, value: ConfigValue) -> Result<bool>;
-
 }
 
 pub(crate) struct LibGit2Repository {
@@ -61,7 +54,6 @@ impl LibGit2Repository {
 }
 
 impl Repository for LibGit2Repository {
-
     fn workdir(&self) -> &Path {
         self.inner.workdir().unwrap() // None in case of bare repo
     }
@@ -107,11 +99,7 @@ impl Repository for LibGit2Repository {
         entries.iter().any(|e| e == value)
     }
 
-    fn remove_config(
-        &self,
-        key: &str,
-        value: &str,
-    ) -> Result<bool> {
+    fn remove_config(&self, key: &str, value: &str) -> Result<bool> {
         if !self.contains_config(key, value) {
             return Ok(false);
         }

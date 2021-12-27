@@ -8,7 +8,7 @@ use std::{
 use anyhow::{anyhow, bail, Result};
 use blake3::Hash;
 
-use crate::{age, nix, ctx::Context};
+use crate::{age, ctx::Context, nix};
 
 pub(crate) fn clean(
     ctx: Context,

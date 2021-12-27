@@ -1,9 +1,9 @@
 mod age;
 mod cli;
 mod commands;
+mod ctx;
 mod git;
 mod nix;
-mod ctx;
 
 use cli::run;
 

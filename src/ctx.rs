@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Result};
+use anyhow::Result;
 
 use crate::git;
 
@@ -62,7 +62,8 @@ impl<'a> Context<'a> {
         let exe = std::env::current_exe()?;
         let exe = exe.to_string_lossy();
 
-        self.repo.set_config("filter.git-agenix.required", true.into())?;
+        self.repo
+            .set_config("filter.git-agenix.required", true.into())?;
         self.repo.set_config(
             "filter.git-agenix.smudge",
             format!("{} smudge -f %f", exe).into(),
