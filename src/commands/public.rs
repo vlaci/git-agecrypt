@@ -24,7 +24,7 @@ pub(crate) enum ConfigCommand {
 pub(crate) enum ConfigResult {
     Succeeded,
     NothingDone,
-    Identities(Vec<String>),
+    Identities(Identities),
 }
 
 impl From<bool> for ConfigResult {
@@ -46,7 +46,7 @@ pub(crate) fn config(repo: git::Repository, cfg: ConfigCommand) -> Result<Config
 }
 
 pub(crate) struct StatusResult {
-    pub identities: Vec<String>,
+    pub identities: Identities,
 }
 
 pub(crate) fn status(repo: git::Repository) -> Result<StatusResult> {
@@ -71,24 +71,23 @@ fn remove_identity(repo: git::Repository, identity: PathBuf) -> Result<ConfigRes
         .into())
 }
 
-fn list_identities(repo: git::Repository) -> Result<Vec<String>> {
-    let identities = repo.list_config("identity")?;
-    let mut rv = Vec::with_capacity(identities.len());
+pub(crate) struct Identities(pub(crate) Vec<Identity>);
+pub(crate) struct Identity {
+    pub path: String,
+}
 
-    let padding = identities.iter().map(|i| i.len()).max().unwrap_or(0);
-    for i in identities {
-        let is_valid = age::validate_identity(&i);
-        if let Err(err) = is_valid {
-            rv.push(format!(
-                "⨯ {:padding$} -- {}",
-                i,
-                err.to_string(),
-                padding = padding
-            ));
-        } else {
-            rv.push(format!("✓ {}", &i));
-        }
+impl Identity {
+    pub fn is_valid(&self) -> Result<()> {
+        age::validate_identity(&self.path)
     }
+}
 
-    Ok(rv)
+fn list_identities(repo: git::Repository) -> Result<Identities> {
+    let identities = repo.list_config("identity")?;
+    Ok(Identities(
+        identities
+            .into_iter()
+            .map(move |path| Identity { path })
+            .collect(),
+    ))
 }
