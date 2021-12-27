@@ -8,11 +8,11 @@ use std::{
 use anyhow::{anyhow, bail, Result};
 use blake3::Hash;
 
-use crate::{age, nix};
+use crate::{age, ctx::Context, git::Repository, nix};
 
 use super::Commands;
 
-impl<'a> Commands<'a> {
+impl<C: Context> Commands<C> {
     pub(crate) fn clean(
         &self,
         secrets_nix: impl AsRef<Path>,

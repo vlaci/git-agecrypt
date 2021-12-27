@@ -7,23 +7,46 @@ use anyhow::Result;
 
 use crate::git;
 
-pub(crate) struct Context<'a> {
-    repo: &'a dyn git::Repository,
+pub(crate) trait Context {
+    type Repo: git::Repository;
+
+    fn repo(&self) -> &Self::Repo;
+
+    fn get_sidecar(&self, path: &Path, extension: &str) -> Result<PathBuf>;
+
+    fn sidecar_directory(&self) -> PathBuf;
+
+    fn add_config(&self, key: &str, value: &str) -> Result<bool>;
+
+    fn remove_config(&self, key: &str, value: &str) -> Result<bool>;
+
+    fn list_config(&self, key: &str) -> Result<Vec<String>>;
+
+    fn configure_filter(&self) -> Result<()>;
+
+    fn deconfigure_filter(&self) -> Result<()>;
+
+    fn remove_sidecar_files(&self) -> Result<()>;
 }
 
-const CONFIG_PATH: &str = "git-agenix.config";
+struct ContextWrapper<R: git::Repository> {
+    repo: R,
+}
 
-impl<'a> Context<'a> {
-    pub(crate) fn new(repo: &'a dyn git::Repository) -> Self {
+impl<R: git::Repository> ContextWrapper<R> {
+    pub(crate) fn new(repo: R) -> Self {
         Self { repo }
     }
+}
 
-    pub(crate) fn repo(&self) -> &dyn git::Repository {
-        self.repo
+impl<R: git::Repository> Context for ContextWrapper<R> {
+    type Repo = R;
+    fn repo(&self) -> &R {
+        &self.repo
     }
 
-    pub(crate) fn get_sidecar(&self, path: impl AsRef<Path>, extension: &str) -> Result<PathBuf> {
-        let relpath = path.as_ref().strip_prefix(self.repo.workdir())?;
+    fn get_sidecar(&self, path: &Path, extension: &str) -> Result<PathBuf> {
+        let relpath = path.strip_prefix(self.repo.workdir())?;
         let name = relpath.to_string_lossy().replace('/', "!");
 
         let dir = self.sidecar_directory();
@@ -38,27 +61,23 @@ impl<'a> Context<'a> {
         self.repo.path().join("git-agenix")
     }
 
-    pub(crate) fn add_config(&self, key: impl AsRef<str>, value: impl AsRef<str>) -> Result<bool> {
-        let entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
-        self.repo.add_config(&entry_name, value.as_ref())
+    fn add_config(&self, key: &str, value: &str) -> Result<bool> {
+        let entry_name = format!("{}.{}", CONFIG_PATH, key);
+        self.repo.add_config(&entry_name, value)
     }
 
-    pub(crate) fn remove_config(
-        &self,
-        key: impl AsRef<str>,
-        value: impl AsRef<str>,
-    ) -> Result<bool> {
-        let entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
+    fn remove_config(&self, key: &str, value: &str) -> Result<bool> {
+        let entry_name = format!("{}.{}", CONFIG_PATH, key);
 
-        self.repo.remove_config(&entry_name, value.as_ref())
+        self.repo.remove_config(&entry_name, value)
     }
 
-    pub(crate) fn list_config(&self, key: impl AsRef<str>) -> Result<Vec<String>> {
-        let _entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
-        self.repo.list_config(key.as_ref())
+    fn list_config(&self, key: &str) -> Result<Vec<String>> {
+        let _entry_name = format!("{}.{}", CONFIG_PATH, key);
+        self.repo.list_config(key)
     }
 
-    pub(crate) fn configure_filter(&self) -> Result<()> {
+    fn configure_filter(&self) -> Result<()> {
         let exe = std::env::current_exe()?;
         let exe = exe.to_string_lossy();
 
@@ -79,7 +98,7 @@ impl<'a> Context<'a> {
         Ok(())
     }
 
-    pub(crate) fn deconfigure_filter(&self) -> Result<()> {
+    fn deconfigure_filter(&self) -> Result<()> {
         // Unfortunately there is no `git config --remove-section <section>` equivalent in libgit2
         let mut command = process::Command::new("git");
         command
@@ -118,7 +137,7 @@ impl<'a> Context<'a> {
         Ok(())
     }
 
-    pub(crate) fn remove_sidecar_files(&self) -> Result<()> {
+    fn remove_sidecar_files(&self) -> Result<()> {
         let dir = self.sidecar_directory();
         fs::remove_dir_all(dir).or_else(|err| {
             if err.kind() == std::io::ErrorKind::NotFound {
@@ -129,4 +148,18 @@ impl<'a> Context<'a> {
         })?;
         Ok(())
     }
+}
+
+fn exist_ok<T>(result: git::Result<T>, default: T) -> Result<T> {
+    match result {
+        Ok(ok) => Ok(ok),
+        Err(err) => match err {
+            git::Error::AlreadyExists(_) => Ok(default),
+            err => Err(anyhow::anyhow!(err)),
+        },
+    }
+}
+
+pub(crate) fn new(repo: git::LibGit2Repository) -> impl Context<Repo = git::LibGit2Repository> {
+    ContextWrapper::new(repo)
 }

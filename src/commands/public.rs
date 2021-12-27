@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 
-use crate::age;
+use crate::{age, ctx::Context, git::Repository};
 
 use super::Commands;
 
@@ -41,7 +41,7 @@ pub(crate) struct StatusResult {
     pub identities: Identities,
 }
 
-impl<'a> Commands<'a> {
+impl<C: Context> Commands<C> {
     pub(crate) fn init(&self) -> Result<()> {
         self.ctx.configure_filter()?;
         Ok(())
@@ -83,14 +83,14 @@ impl<'a> Commands<'a> {
         }
         Ok(self
             .ctx
-            .add_config("identity", identity.to_string_lossy())?
+            .add_config("identity", &identity.to_string_lossy())?
             .into())
     }
 
     fn remove_identity(&self, identity: PathBuf) -> Result<ConfigResult> {
         Ok(self
             .ctx
-            .remove_config("identity", identity.to_string_lossy())?
+            .remove_config("identity", &identity.to_string_lossy())?
             .into())
     }
 }

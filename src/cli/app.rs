@@ -7,7 +7,7 @@ use crate::{
 
 use super::args::{Args, Commands};
 
-pub(crate) fn run(args: Args, ctx: Context) -> Result<()> {
+pub(crate) fn run(args: Args, ctx: impl Context) -> Result<()> {
     let cmd = commands::Commands { ctx };
     match args.command {
         Commands::Init => {
