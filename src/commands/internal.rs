@@ -48,7 +48,7 @@ pub(crate) fn clean(
     );
     let result = if hash == old_hash {
         log::debug!("File didn't change since last encryption, loading from git HEAD");
-        ctx.repo().get_file_contents(file)
+        ctx.repo().get_file_contents(&file)
     } else {
         log::debug!("File changed since last encryption, re-encrypting");
         File::create(sidecar)?.write_all(hash.as_bytes())?;

@@ -7,19 +7,19 @@ use anyhow::{Result};
 
 use crate::git;
 
-pub(crate) struct Context {
-    repo: git::Repository,
+pub(crate) struct Context<'a> {
+    repo: &'a dyn git::Repository,
 }
 
 const CONFIG_PATH: &str = "git-agenix.config";
 
-impl Context {
-    pub(crate) fn new(repo: git::Repository) -> Self {
+impl<'a> Context<'a> {
+    pub(crate) fn new(repo: &'a dyn git::Repository) -> Self {
         Self { repo }
     }
 
-    pub(crate) fn repo(&self) -> &git::Repository {
-        &self.repo
+    pub(crate) fn repo(&self) -> &dyn git::Repository {
+        self.repo
     }
 
     pub(crate) fn get_sidecar(&self, path: impl AsRef<Path>, extension: &str) -> Result<PathBuf> {
@@ -40,7 +40,7 @@ impl Context {
 
     pub(crate) fn add_config(&self, key: impl AsRef<str>, value: impl AsRef<str>) -> Result<bool> {
         let entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
-        self.repo.add_config(&entry_name, value)
+        self.repo.add_config(&entry_name, value.as_ref())
     }
 
     pub(crate) fn remove_config(
@@ -50,12 +50,12 @@ impl Context {
     ) -> Result<bool> {
         let entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
 
-        self.repo.remove_config(&entry_name, value)
+        self.repo.remove_config(&entry_name, value.as_ref())
     }
 
     pub(crate) fn list_config(&self, key: impl AsRef<str>) -> Result<Vec<String>> {
         let _entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
-        self.repo.list_config(key)
+        self.repo.list_config(key.as_ref())
     }
 
     pub(crate) fn configure_filter(&self) -> Result<()> {
