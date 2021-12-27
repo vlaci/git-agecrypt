@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{AppSettings, Args, Parser, Subcommand};
-
-use crate::commands::public::ConfigCommand;
+use clap::{AppSettings, Parser, Subcommand};
 
 /// Transparently encrypt/decrypt age secrets
 #[derive(Parser)]
@@ -10,7 +8,7 @@ use crate::commands::public::ConfigCommand;
 #[clap(global_setting(AppSettings::UseLongFormatForHelpSubcommand))]
 #[clap(global_setting(AppSettings::DeriveDisplayOrder))]
 #[clap(setting(AppSettings::SubcommandRequiredElseHelp))]
-pub(crate) struct CliArgs {
+pub struct Args {
     #[clap(subcommand)]
     pub command: Commands,
 }
@@ -20,7 +18,7 @@ pub(crate) struct CliArgs {
     after_help = "In addition to the above, The following subcommands are used from git filters:
     clean, smudge, textconv"
 )]
-pub(crate) enum Commands {
+pub enum Commands {
     /// Set-up repository for use with git-agenix
     Init,
 
@@ -71,8 +69,8 @@ pub(crate) enum Commands {
     },
 }
 
-#[derive(Args)]
-pub(crate) struct Config {
+#[derive(clap::Args)]
+pub struct Config {
     /// Register identity usable for decryption
     #[clap(short, long, group = "config")]
     add_identity: Option<PathBuf>,
@@ -100,6 +98,6 @@ impl From<Config> for ConfigCommand {
     }
 }
 
-pub(crate) fn parse_args() -> CliArgs {
-    CliArgs::parse()
+pub fn parse_args() -> Args {
+    Args::parse()
 }
