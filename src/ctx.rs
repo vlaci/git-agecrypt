@@ -22,11 +22,11 @@ pub(crate) trait Context {
 
     fn list_config(&self, key: &str) -> Result<Vec<String>>;
 
-    fn configure_filter(&self) -> Result<()>;
+    fn configure_filter(&self) -> Result<bool>;
 
-    fn deconfigure_filter(&self) -> Result<()>;
+    fn deconfigure_filter(&self) -> Result<bool>;
 
-    fn remove_sidecar_files(&self) -> Result<()>;
+    fn remove_sidecar_files(&self) -> Result<bool>;
 }
 
 struct ContextWrapper<R: git::Repository> {
@@ -77,28 +77,30 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
         self.repo.list_config(key)
     }
 
-    fn configure_filter(&self) -> Result<()> {
+    fn configure_filter(&self) -> Result<bool> {
         let exe = std::env::current_exe()?;
         let exe = exe.to_string_lossy();
+        let mut changed = false;
 
-        self.repo
+        changed |= self.repo
             .set_config("filter.git-agenix.required", true.into())?;
-        self.repo.set_config(
+        changed |= self.repo.set_config(
             "filter.git-agenix.smudge",
             format!("{} smudge -f %f", exe).into(),
         )?;
-        self.repo.set_config(
+        changed |= self.repo.set_config(
             "filter.git-agenix.clean",
             format!("{} clean -f %f", exe).into(),
         )?;
-        self.repo.set_config(
+        changed |= self.repo.set_config(
             "diff.git-agenix.textconv",
             format!("{} textconv", exe).into(),
         )?;
-        Ok(())
+        Ok(changed)
     }
 
-    fn deconfigure_filter(&self) -> Result<()> {
+    fn deconfigure_filter(&self) -> Result<bool> {
+        let mut changed = false;
         // Unfortunately there is no `git config --remove-section <section>` equivalent in libgit2
         let mut command = process::Command::new("git");
         command
@@ -117,6 +119,8 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
             );
         }
 
+        changed |= output.status.success();
+
         let mut command = process::Command::new("git");
         command
             .arg("config")
@@ -134,19 +138,21 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
             );
         }
 
-        Ok(())
+        changed |= output.status.success();
+
+        Ok(changed)
     }
 
-    fn remove_sidecar_files(&self) -> Result<()> {
+    fn remove_sidecar_files(&self) -> Result<bool> {
         let dir = self.sidecar_directory();
-        fs::remove_dir_all(dir).or_else(|err| {
+        let removed = fs::remove_dir_all(dir).map(|_| true).or_else(|err| {
             if err.kind() == std::io::ErrorKind::NotFound {
-                Ok(())
+                Ok(false)
             } else {
                 Err(err)
             }
         })?;
-        Ok(())
+        Ok(removed)
     }
 }
 

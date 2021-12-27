@@ -30,18 +30,18 @@ fn run_public_command(commands: PublicCommands, ctx: impl Context) -> Result<(),
     let cmd = public::CommandContext { ctx };
     match commands {
         PublicCommands::Init => {
-            cmd.init()?;
-            print!("Success!");
+            let result = cmd.init()?;
+            print!("{}", result);
             Ok(())
         }
         PublicCommands::Deinit => {
-            cmd.deinit()?;
-            println!("Success!");
+            let result = cmd.deinit()?;
+            print!("{}", result);
             Ok(())
         }
         PublicCommands::Status => {
-            let status = cmd.status()?;
-            print!("{}", status);
+            let result = cmd.status()?;
+            print!("{}", result);
             Ok(())
         }
         PublicCommands::Config { cfg } => {
@@ -51,11 +51,27 @@ fn run_public_command(commands: PublicCommands, ctx: impl Context) -> Result<(),
     }
 }
 
+impl<T: Display> Display for public::Outcome<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            public::Outcome::Changes(c) => write!(f, "Changes made:\n{}", c),
+            public::Outcome::NoChanges => writeln!(f, "No changes needed"),
+            public::Outcome::Output(o) => write!(f, "{}", o),
+        }
+    }
+}
+
+impl Display for public::NoOutput {
+    fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
+        Ok(())
+    }
+}
+
 impl Display for public::ConfigResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            public::ConfigResult::Succeeded => writeln!(f, "Success!"),
-            public::ConfigResult::NothingDone => Ok(()),
+            public::ConfigResult::IdentityAdded => writeln!(f, "Identity added"),
+            public::ConfigResult::IdentityRemoved => writeln!(f, "Identity removed"),
             public::ConfigResult::Identities(identities) => {
                 write!(f, "{}", identities)
             }

@@ -26,6 +26,7 @@ pub(crate) struct LibGit2Repository {
     inner: git2::Repository,
 }
 
+#[derive(PartialEq)]
 pub(crate) enum ConfigValue {
     Bool(bool),
     String(String),
@@ -134,7 +135,7 @@ impl Repository for LibGit2Repository {
 
     fn set_config(&self, key: &str, value: ConfigValue) -> Result<bool> {
         let mut cfg = self.inner.config()?;
-        let contains = self.get_config(key).is_some();
+        let contains = self.get_config(key).map(|v| v == value).unwrap_or(false);
         match value {
             ConfigValue::Bool(b) => cfg.set_bool(key, b)?,
             ConfigValue::String(s) => cfg.set_str(key, &s)?,

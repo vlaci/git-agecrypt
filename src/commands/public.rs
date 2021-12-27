@@ -14,22 +14,24 @@ pub(crate) enum ConfigCommand {
     ListIdentities,
 }
 
+pub(crate) enum Outcome<T> {
+    NoChanges,
+    Changes(T),
+    Output(T),
+}
+
+pub struct NoOutput;
+
+use Outcome::*;
+
 pub(crate) enum ConfigResult {
-    Succeeded,
-    NothingDone,
+    IdentityAdded,
+    IdentityRemoved,
     Identities(Identities),
 }
 
-impl From<bool> for ConfigResult {
-    fn from(val: bool) -> Self {
-        if val {
-            Self::Succeeded
-        } else {
-            Self::NothingDone
-        }
-    }
-}
 pub(crate) struct Identities(pub(crate) Vec<Identity>);
+
 pub(crate) struct Identity {
     pub path: String,
 }
@@ -44,23 +46,33 @@ pub(crate) struct StatusResult {
 }
 
 impl<C: Context> CommandContext<C> {
-    pub(crate) fn init(&self) -> Result<()> {
-        self.ctx.configure_filter()?;
-        Ok(())
-    }
-
-    pub(crate) fn deinit(&self) -> Result<()> {
-        self.ctx.deconfigure_filter()?;
-        self.ctx.remove_sidecar_files()?;
-        Ok(())
-    }
-
-    pub(crate) fn config(&self, cfg: ConfigCommand) -> Result<ConfigResult> {
-        match cfg {
-            ConfigCommand::AddIdentity(identity) => self.add_identity(identity),
-            ConfigCommand::RemoveIdentity(identity) => self.remove_identity(identity),
-            ConfigCommand::ListIdentities => Ok(ConfigResult::Identities(self.list_identities()?)),
+    pub(crate) fn init(&self) -> Result<Outcome<NoOutput>> {
+        let changed = self.ctx.configure_filter()?;
+        if changed {
+            Ok(Changes(NoOutput{}))
+        } else {
+            Ok(NoChanges)
         }
+    }
+
+    pub(crate) fn deinit(&self) -> Result<Outcome<NoOutput>> {
+        let changed =
+        self.ctx.deconfigure_filter()? ||
+        self.ctx.remove_sidecar_files()?;
+        if changed {
+            Ok(Changes(NoOutput{}))
+        } else {
+            Ok(NoChanges)
+        }
+    }
+
+    pub(crate) fn config(&self, cfg: ConfigCommand) -> Result<Outcome<ConfigResult>> {
+        let rv = match cfg {
+            ConfigCommand::AddIdentity(identity) => self.add_identity(identity)?,
+            ConfigCommand::RemoveIdentity(identity) => self.remove_identity(identity)?,
+            ConfigCommand::ListIdentities => Output(ConfigResult::Identities(self.list_identities()?)),
+        };
+        Ok(rv)
     }
     fn list_identities(&self) -> Result<Identities> {
         let identities = self.ctx.list_config("identity")?;
@@ -78,21 +90,29 @@ impl<C: Context> CommandContext<C> {
         Ok(StatusResult { identities })
     }
 
-    fn add_identity(&self, identity: PathBuf) -> Result<ConfigResult> {
+    fn add_identity(&self, identity: PathBuf) -> Result<Outcome<ConfigResult>> {
         let fpath = self.ctx.repo().workdir().join(&identity);
         if let Err(err) = age::validate_identity(&fpath) {
             bail!("Not adding identity; details: {}", err);
         }
-        Ok(self
+        let changed = self
             .ctx
-            .add_config("identity", &identity.to_string_lossy())?
-            .into())
+            .add_config("identity", &identity.to_string_lossy())?;
+        if changed {
+            Ok(Changes(ConfigResult::IdentityAdded))
+        } else {
+            Ok(NoChanges)
+        }
     }
 
-    fn remove_identity(&self, identity: PathBuf) -> Result<ConfigResult> {
-        Ok(self
+    fn remove_identity(&self, identity: PathBuf) -> Result<Outcome<ConfigResult>> {
+        let changed = self
             .ctx
-            .remove_config("identity", &identity.to_string_lossy())?
-            .into())
+            .remove_config("identity", &identity.to_string_lossy())?;
+        if changed {
+            Ok(Changes(ConfigResult::IdentityRemoved))
+        } else {
+            Ok(NoChanges)
+        }
     }
 }
