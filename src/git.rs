@@ -1,7 +1,6 @@
 use std::{
-    env, fs,
+    env,
     path::{Path, PathBuf},
-    process,
 };
 
 use anyhow::{bail, Result};
@@ -10,7 +9,22 @@ pub(crate) struct Repository {
     inner: git2::Repository,
 }
 
-const CONFIG_PATH: &str = "git-agenix.config";
+pub(crate) enum ConfigValue {
+    Bool(bool),
+    String(String),
+}
+
+impl From<bool> for ConfigValue {
+    fn from(b: bool) -> Self {
+        Self::Bool(b)
+    }
+}
+
+impl From<String> for ConfigValue {
+    fn from(s: String) -> Self {
+        Self::String(s)
+    }
+}
 
 impl Repository {
     pub(crate) fn from_current_dir() -> Result<Self> {
@@ -25,20 +39,8 @@ impl Repository {
         self.inner.workdir().unwrap() // None in case of bare repo
     }
 
-    pub(crate) fn get_sidecar(&self, path: impl AsRef<Path>, extension: &str) -> Result<PathBuf> {
-        let relpath = path.as_ref().strip_prefix(self.workdir())?;
-        let name = relpath.to_string_lossy().replace('/', "!");
-
-        let dir = self.sidecar_directory();
-        fs::create_dir_all(&dir)?;
-
-        let mut rv = dir.join(name);
-        rv.set_extension(extension);
-        Ok(rv)
-    }
-
-    fn sidecar_directory(&self) -> PathBuf {
-        self.inner.path().join("git-agenix")
+    pub(crate) fn path(&self) -> &Path {
+        self.inner.path()
     }
 
     pub(crate) fn get_file_contents(&self, path: impl AsRef<Path>) -> Result<Vec<u8>> {
@@ -55,9 +57,8 @@ impl Repository {
         }
 
         let mut cfg = self.inner.config()?;
-        let entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
 
-        cfg.set_multivar(&entry_name, "^$", value.as_ref())?;
+        cfg.set_multivar(key.as_ref(), "^$", value.as_ref())?;
 
         Ok(true)
     }
@@ -77,93 +78,40 @@ impl Repository {
         }
 
         let mut cfg = self.inner.config()?;
-        let entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
-
         let pattern = format!("^{}$", regex::escape(value.as_ref()));
-        cfg.remove_multivar(&entry_name, &pattern)?;
+        cfg.remove_multivar(key.as_ref(), &pattern)?;
 
         Ok(true)
     }
 
     pub(crate) fn list_config(&self, key: impl AsRef<str>) -> Result<Vec<String>> {
         let cfg = self.inner.config()?;
-        let entry_name = format!("{}.{}", CONFIG_PATH, key.as_ref());
         let entries = cfg
-            .entries(Some(&entry_name))?
+            .entries(Some(key.as_ref()))?
             .filter_map(|e| e.ok().and_then(|e| e.value().map(|e| e.to_owned())))
             .collect();
 
         Ok(entries)
     }
 
-    pub(crate) fn configure_filter(&self) -> Result<()> {
-        let exe = std::env::current_exe()?;
-        let exe = exe.to_string_lossy();
+    pub(crate) fn get_config(&self, key: impl AsRef<str>) -> Option<ConfigValue> {
+        let cfg = self.inner.config().ok()?;
+        if let Ok(value) = cfg.get_bool(key.as_ref()) {
+            Some(value.into())
+        } else if let Ok(value) = cfg.get_string(key.as_ref()) {
+            Some(value.into())
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn set_config(&self, key: impl AsRef<str>, value: ConfigValue) -> Result<bool> {
         let mut cfg = self.inner.config()?;
-        cfg.set_bool("filter.git-agenix.required", true)?;
-        cfg.set_str(
-            "filter.git-agenix.smudge",
-            format!("{} smudge -f %f", exe).as_str(),
-        )?;
-        cfg.set_str(
-            "filter.git-agenix.clean",
-            format!("{} clean -f %f", exe).as_str(),
-        )?;
-        cfg.set_str(
-            "diff.git-agenix.textconv",
-            format!("{} textconv", exe).as_str(),
-        )?;
-        Ok(())
-    }
-
-    pub(crate) fn deconfigure_filter(&self) -> Result<()> {
-        // Unfortunately there is no `git config --remove-section <section>` equivalent in libgit2
-        let mut command = process::Command::new("git");
-        command
-            .arg("config")
-            .arg("--remove-section")
-            .arg("filter.git-agenix");
-        let output = command.output()?;
-
-        if !output.status.success() {
-            log::error!(
-                "Failed to execute command. This may not be an issue; command='{:?}' status='{}', stdout={:?}, stderr={:?}",
-                command,
-                output.status,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
+        let contains = self.get_config(&key).is_some();
+        match value {
+            ConfigValue::Bool(b) => cfg.set_bool(key.as_ref(), b)?,
+            ConfigValue::String(s) => cfg.set_str(key.as_ref(), &s)?,
         }
-
-        let mut command = process::Command::new("git");
-        command
-            .arg("config")
-            .arg("--remove-section")
-            .arg("diff.git-agenix");
-        let output = command.output()?;
-
-        if !output.status.success() {
-            log::error!(
-                "Failed to execute command. This may not be an issue; command='{:?}' status='{}', stdout={:?}, stderr={:?}",
-                command,
-                output.status,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-
-        Ok(())
-    }
-
-    pub(crate) fn remove_sidecar_files(&self) -> Result<()> {
-        let dir = self.sidecar_directory();
-        fs::remove_dir_all(dir).or_else(|err| {
-            if err.kind() == std::io::ErrorKind::NotFound {
-                Ok(())
-            } else {
-                Err(err)
-            }
-        })?;
-        Ok(())
+        Ok(!contains)
     }
 }

@@ -8,16 +8,16 @@ use std::{
 use anyhow::{anyhow, bail, Result};
 use blake3::Hash;
 
-use crate::{age, git, nix};
+use crate::{age, nix, ctx::Context};
 
 pub(crate) fn clean(
-    repo: git::Repository,
+    ctx: Context,
     secrets_nix: impl AsRef<Path>,
     file: impl AsRef<Path>,
 ) -> Result<()> {
     log::info!("Encrypting file");
-    let file = repo.workdir().join(file);
-    let sidecar = repo.get_sidecar(&file, "hash")?;
+    let file = ctx.repo().workdir().join(file);
+    let sidecar = ctx.get_sidecar(&file, "hash")?;
 
     log::debug!(
         "Looking for saved has information. target={:?}, sidecar={:?}",
@@ -48,7 +48,7 @@ pub(crate) fn clean(
     );
     let result = if hash == old_hash {
         log::debug!("File didn't change since last encryption, loading from git HEAD");
-        repo.get_file_contents(file)
+        ctx.repo().get_file_contents(file)
     } else {
         log::debug!("File changed since last encryption, re-encrypting");
         File::create(sidecar)?.write_all(hash.as_bytes())?;
@@ -59,15 +59,15 @@ pub(crate) fn clean(
 }
 
 pub(crate) fn smudge(
-    repo: git::Repository,
+    ctx: Context,
     identities: &[impl AsRef<Path>],
     file: impl AsRef<Path>,
 ) -> Result<()> {
     log::info!("Decrypting file");
-    let file = repo.workdir().join(file);
+    let file = ctx.repo().workdir().join(file);
 
     log::debug!("Loading identities from config");
-    let mut all_identities = repo.list_config("identity")?;
+    let mut all_identities = ctx.repo().list_config("identity")?;
     log::debug!(
         "Loaded identities from config; identities='{:?}'",
         all_identities
@@ -80,7 +80,7 @@ pub(crate) fn smudge(
 
     if let Some(rv) = age::decrypt(&all_identities, &mut io::stdin())? {
         log::info!("Decrypted file");
-        let sidecar = repo.get_sidecar(&file, "hash")?;
+        let sidecar = ctx.get_sidecar(&file, "hash")?;
         let mut hasher = blake3::Hasher::new();
         let hash = hasher.update(&rv).finalize();
 
@@ -98,13 +98,13 @@ pub(crate) fn smudge(
 }
 
 pub(crate) fn textconv(
-    repo: git::Repository,
+    ctx: Context,
     identities: &[impl AsRef<Path>],
     path: impl AsRef<Path>,
 ) -> Result<()> {
     log::info!("Decrypting file to show in diff");
 
-    let mut all_identities = repo.list_config("identities")?;
+    let mut all_identities = ctx.list_config("identities")?;
     all_identities.extend(
         identities
             .iter()

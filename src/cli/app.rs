@@ -1,41 +1,39 @@
 use std::{
     fmt::{Display, Formatter},
-    io::stdout,
 };
 
 use anyhow::Result;
 
 use crate::{
-    commands::{internal, public},
-    git::Repository,
+    commands::{internal, public}, ctx::Context,
 };
 
 use super::args::{Args, Commands};
 
-pub(crate) fn run(args: Args, repo: Repository) -> Result<()> {
+pub(crate) fn run(args: Args, ctx: Context) -> Result<()> {
     match args.command {
         Commands::Init => {
-            public::init(repo)?;
+            public::init(ctx)?;
             print!("Success!");
             Ok(())
         }
         Commands::Deinit => {
-            public::deinit(repo)?;
+            public::deinit(ctx)?;
             println!("Success!");
             Ok(())
         }
         Commands::Status => {
-            let status = public::status(repo)?;
+            let status = public::status(ctx)?;
             print!("{}", status);
             Ok(())
         }
         Commands::Config { cfg } => {
-            print!("{}", public::config(repo, cfg.into())?);
+            print!("{}", public::config(ctx, cfg.into())?);
             Ok(())
         }
-        Commands::Clean { secrets_nix, file } => internal::clean(repo, &secrets_nix, &file),
-        Commands::Smudge { identities, file } => internal::smudge(repo, &identities, &file),
-        Commands::Textconv { identities, path } => internal::textconv(repo, &identities, &path),
+        Commands::Clean { secrets_nix, file } => internal::clean(ctx, &secrets_nix, &file),
+        Commands::Smudge { identities, file } => internal::smudge(ctx, &identities, &file),
+        Commands::Textconv { identities, path } => internal::textconv(ctx, &identities, &path),
     }?;
     Ok(())
 }
