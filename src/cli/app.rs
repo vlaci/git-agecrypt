@@ -1,36 +1,37 @@
 use anyhow::Result;
 
 use crate::{
-    commands::{internal, public},
+    commands::{self, public},
     ctx::Context,
 };
 
 use super::args::{Args, Commands};
 
 pub(crate) fn run(args: Args, ctx: Context) -> Result<()> {
+    let cmd = commands::Commands { ctx };
     match args.command {
         Commands::Init => {
-            public::init(ctx)?;
+            cmd.init()?;
             print!("Success!");
             Ok(())
         }
         Commands::Deinit => {
-            public::deinit(ctx)?;
+            cmd.deinit()?;
             println!("Success!");
             Ok(())
         }
         Commands::Status => {
-            let status = public::status(ctx)?;
+            let status = cmd.status()?;
             print!("{}", status);
             Ok(())
         }
         Commands::Config { cfg } => {
-            print!("{}", public::config(ctx, cfg.into())?);
+            print!("{}", cmd.config(cfg.into())?);
             Ok(())
         }
-        Commands::Clean { secrets_nix, file } => internal::clean(ctx, &secrets_nix, &file),
-        Commands::Smudge { identities, file } => internal::smudge(ctx, &identities, &file),
-        Commands::Textconv { identities, path } => internal::textconv(ctx, &identities, &path),
+        Commands::Clean { secrets_nix, file } => cmd.clean(&secrets_nix, &file),
+        Commands::Smudge { identities, file } => cmd.smudge(&identities, &file),
+        Commands::Textconv { identities, path } => cmd.textconv(&identities, &path),
     }?;
     Ok(())
 }

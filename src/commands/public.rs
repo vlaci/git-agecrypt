@@ -2,18 +2,9 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 
-use crate::{age, ctx::Context};
+use crate::age;
 
-pub(crate) fn init(ctx: Context) -> Result<()> {
-    ctx.configure_filter()?;
-    Ok(())
-}
-
-pub(crate) fn deinit(ctx: Context) -> Result<()> {
-    ctx.deconfigure_filter()?;
-    ctx.remove_sidecar_files()?;
-    Ok(())
-}
+use super::Commands;
 
 pub(crate) enum ConfigCommand {
     AddIdentity(PathBuf),
@@ -36,41 +27,6 @@ impl From<bool> for ConfigResult {
         }
     }
 }
-
-pub(crate) fn config(ctx: Context, cfg: ConfigCommand) -> Result<ConfigResult> {
-    match cfg {
-        ConfigCommand::AddIdentity(identity) => add_identity(ctx, identity),
-        ConfigCommand::RemoveIdentity(identity) => remove_identity(ctx, identity),
-        ConfigCommand::ListIdentities => Ok(ConfigResult::Identities(list_identities(ctx)?)),
-    }
-}
-
-pub(crate) struct StatusResult {
-    pub identities: Identities,
-}
-
-pub(crate) fn status(ctx: Context) -> Result<StatusResult> {
-    let identities = list_identities(ctx)?;
-
-    Ok(StatusResult { identities })
-}
-
-fn add_identity(ctx: Context, identity: PathBuf) -> Result<ConfigResult> {
-    let fpath = ctx.repo().workdir().join(&identity);
-    if let Err(err) = age::validate_identity(&fpath) {
-        bail!("Not adding identity; details: {}", err);
-    }
-    Ok(ctx
-        .add_config("identity", identity.to_string_lossy())?
-        .into())
-}
-
-fn remove_identity(ctx: Context, identity: PathBuf) -> Result<ConfigResult> {
-    Ok(ctx
-        .remove_config("identity", identity.to_string_lossy())?
-        .into())
-}
-
 pub(crate) struct Identities(pub(crate) Vec<Identity>);
 pub(crate) struct Identity {
     pub path: String,
@@ -81,13 +37,60 @@ impl Identity {
         age::validate_identity(&self.path)
     }
 }
+pub(crate) struct StatusResult {
+    pub identities: Identities,
+}
 
-fn list_identities(ctx: Context) -> Result<Identities> {
-    let identities = ctx.list_config("identity")?;
-    Ok(Identities(
-        identities
-            .into_iter()
-            .map(move |path| Identity { path })
-            .collect(),
-    ))
+impl<'a> Commands<'a> {
+    pub(crate) fn init(&self) -> Result<()> {
+        self.ctx.configure_filter()?;
+        Ok(())
+    }
+
+    pub(crate) fn deinit(&self) -> Result<()> {
+        self.ctx.deconfigure_filter()?;
+        self.ctx.remove_sidecar_files()?;
+        Ok(())
+    }
+
+    pub(crate) fn config(&self, cfg: ConfigCommand) -> Result<ConfigResult> {
+        match cfg {
+            ConfigCommand::AddIdentity(identity) => self.add_identity(identity),
+            ConfigCommand::RemoveIdentity(identity) => self.remove_identity(identity),
+            ConfigCommand::ListIdentities => Ok(ConfigResult::Identities(self.list_identities()?)),
+        }
+    }
+    fn list_identities(&self) -> Result<Identities> {
+        let identities = self.ctx.list_config("identity")?;
+        Ok(Identities(
+            identities
+                .into_iter()
+                .map(move |path| Identity { path })
+                .collect(),
+        ))
+    }
+
+    pub(crate) fn status(&self) -> Result<StatusResult> {
+        let identities = self.list_identities()?;
+
+        Ok(StatusResult { identities })
+    }
+
+    fn add_identity(&self, identity: PathBuf) -> Result<ConfigResult> {
+        let fpath = self.ctx.repo().workdir().join(&identity);
+        if let Err(err) = age::validate_identity(&fpath) {
+            bail!("Not adding identity; details: {}", err);
+        }
+        Ok(self
+            .ctx
+            .add_config("identity", identity.to_string_lossy())?
+            .into())
+    }
+
+    fn remove_identity(&self, identity: PathBuf) -> Result<ConfigResult> {
+        Ok(self
+            .ctx
+            .remove_config("identity", identity.to_string_lossy())?
+            .into())
+    }
 }

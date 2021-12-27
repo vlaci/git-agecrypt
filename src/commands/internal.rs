@@ -8,121 +8,127 @@ use std::{
 use anyhow::{anyhow, bail, Result};
 use blake3::Hash;
 
-use crate::{age, ctx::Context, nix};
+use crate::{age, nix};
 
-pub(crate) fn clean(
-    ctx: Context,
-    secrets_nix: impl AsRef<Path>,
-    file: impl AsRef<Path>,
-) -> Result<()> {
-    log::info!("Encrypting file");
-    let file = ctx.repo().workdir().join(file);
-    let sidecar = ctx.get_sidecar(&file, "hash")?;
+use super::Commands;
 
-    log::debug!(
-        "Looking for saved has information. target={:?}, sidecar={:?}",
-        file,
-        sidecar
-    );
-    let mut existing_hash = [0u8; 32];
-
-    match File::open(&sidecar) {
-        Ok(mut f) => {
-            f.read_exact(&mut existing_hash)?;
-        }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => log::debug!("No saved hash file found"),
-        Err(e) => {
-            bail!(e);
-        }
-    }
-    let mut hasher = blake3::Hasher::new();
-    let mut contents = vec![];
-    io::stdin().read_to_end(&mut contents)?;
-    let hash = hasher.update(&contents).finalize();
-
-    let old_hash = Hash::from(existing_hash);
-    log::debug!(
-        "Comparing hashes for file; old_hash={}, new_hash={:?}",
-        old_hash.to_hex().as_str(),
-        hash.to_hex().as_str()
-    );
-    let result = if hash == old_hash {
-        log::debug!("File didn't change since last encryption, loading from git HEAD");
-        ctx.repo().get_file_contents(&file)
-    } else {
-        log::debug!("File changed since last encryption, re-encrypting");
-        File::create(sidecar)?.write_all(hash.as_bytes())?;
-        let rule = load_rule_for(&secrets_nix, file)?;
-        age::encrypt(&rule.public_keys, &mut &contents[..])
-    }?;
-    Ok(io::stdout().write_all(&result)?)
-}
-
-pub(crate) fn smudge(
-    ctx: Context,
-    identities: &[impl AsRef<Path>],
-    file: impl AsRef<Path>,
-) -> Result<()> {
-    log::info!("Decrypting file");
-    let file = ctx.repo().workdir().join(file);
-
-    log::debug!("Loading identities from config");
-    let mut all_identities = ctx.repo().list_config("identity")?;
-    log::debug!(
-        "Loaded identities from config; identities='{:?}'",
-        all_identities
-    );
-    all_identities.extend(
-        identities
-            .iter()
-            .map(|i| i.as_ref().to_string_lossy().into()),
-    );
-
-    if let Some(rv) = age::decrypt(&all_identities, &mut io::stdin())? {
-        log::info!("Decrypted file");
-        let sidecar = ctx.get_sidecar(&file, "hash")?;
-        let mut hasher = blake3::Hasher::new();
-        let hash = hasher.update(&rv).finalize();
+impl<'a> Commands<'a> {
+    pub(crate) fn clean(
+        &self,
+        secrets_nix: impl AsRef<Path>,
+        file: impl AsRef<Path>,
+    ) -> Result<()> {
+        log::info!("Encrypting file");
+        let file = self.ctx.repo().workdir().join(file);
+        let sidecar = self.ctx.get_sidecar(&file, "hash")?;
 
         log::debug!(
-            "Storing hash for file; hash={:?} sidecar={:?}",
-            hash.to_hex().as_str(),
+            "Looking for saved has information. target={:?}, sidecar={:?}",
+            file,
             sidecar
         );
-        File::create(sidecar)?.write_all(hash.as_bytes())?;
+        let mut existing_hash = [0u8; 32];
 
-        Ok(io::stdout().write_all(&rv)?)
-    } else {
-        bail!("Input isn't encrypted")
+        match File::open(&sidecar) {
+            Ok(mut f) => {
+                f.read_exact(&mut existing_hash)?;
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                log::debug!("No saved hash file found")
+            }
+            Err(e) => {
+                bail!(e);
+            }
+        }
+        let mut hasher = blake3::Hasher::new();
+        let mut contents = vec![];
+        io::stdin().read_to_end(&mut contents)?;
+        let hash = hasher.update(&contents).finalize();
+
+        let old_hash = Hash::from(existing_hash);
+        log::debug!(
+            "Comparing hashes for file; old_hash={}, new_hash={:?}",
+            old_hash.to_hex().as_str(),
+            hash.to_hex().as_str()
+        );
+        let result = if hash == old_hash {
+            log::debug!("File didn't change since last encryption, loading from git HEAD");
+            self.ctx.repo().get_file_contents(&file)
+        } else {
+            log::debug!("File changed since last encryption, re-encrypting");
+            File::create(sidecar)?.write_all(hash.as_bytes())?;
+            let rule = load_rule_for(&secrets_nix, file)?;
+            age::encrypt(&rule.public_keys, &mut &contents[..])
+        }?;
+        Ok(io::stdout().write_all(&result)?)
     }
-}
 
-pub(crate) fn textconv(
-    ctx: Context,
-    identities: &[impl AsRef<Path>],
-    path: impl AsRef<Path>,
-) -> Result<()> {
-    log::info!("Decrypting file to show in diff");
+    pub(crate) fn smudge(
+        &self,
+        identities: &[impl AsRef<Path>],
+        file: impl AsRef<Path>,
+    ) -> Result<()> {
+        log::info!("Decrypting file");
+        let file = self.ctx.repo().workdir().join(file);
 
-    let mut all_identities = ctx.list_config("identities")?;
-    all_identities.extend(
-        identities
-            .iter()
-            .map(|i| i.as_ref().to_string_lossy().into()),
-    );
+        log::debug!("Loading identities from config");
+        let mut all_identities = self.ctx.repo().list_config("identity")?;
+        log::debug!(
+            "Loaded identities from config; identities='{:?}'",
+            all_identities
+        );
+        all_identities.extend(
+            identities
+                .iter()
+                .map(|i| i.as_ref().to_string_lossy().into()),
+        );
 
-    let mut f = File::open(path)?;
-    let result = if let Some(rv) = age::decrypt(&all_identities, &mut f)? {
-        log::info!("Decrypted file to show in diff");
-        rv
-    } else {
-        log::info!("File isn't encrypted, probably a working copy; showing as is.");
-        f.rewind()?;
-        let mut buff = vec![];
-        f.read_to_end(&mut buff)?;
-        buff
-    };
-    Ok(io::stdout().write_all(&result)?)
+        if let Some(rv) = age::decrypt(&all_identities, &mut io::stdin())? {
+            log::info!("Decrypted file");
+            let sidecar = self.ctx.get_sidecar(&file, "hash")?;
+            let mut hasher = blake3::Hasher::new();
+            let hash = hasher.update(&rv).finalize();
+
+            log::debug!(
+                "Storing hash for file; hash={:?} sidecar={:?}",
+                hash.to_hex().as_str(),
+                sidecar
+            );
+            File::create(sidecar)?.write_all(hash.as_bytes())?;
+
+            Ok(io::stdout().write_all(&rv)?)
+        } else {
+            bail!("Input isn't encrypted")
+        }
+    }
+
+    pub(crate) fn textconv(
+        &self,
+        identities: &[impl AsRef<Path>],
+        path: impl AsRef<Path>,
+    ) -> Result<()> {
+        log::info!("Decrypting file to show in diff");
+
+        let mut all_identities = self.ctx.list_config("identities")?;
+        all_identities.extend(
+            identities
+                .iter()
+                .map(|i| i.as_ref().to_string_lossy().into()),
+        );
+
+        let mut f = File::open(path)?;
+        let result = if let Some(rv) = age::decrypt(&all_identities, &mut f)? {
+            log::info!("Decrypted file to show in diff");
+            rv
+        } else {
+            log::info!("File isn't encrypted, probably a working copy; showing as is.");
+            f.rewind()?;
+            let mut buff = vec![];
+            f.read_to_end(&mut buff)?;
+            buff
+        };
+        Ok(io::stdout().write_all(&result)?)
+    }
 }
 
 #[derive(Debug)]
