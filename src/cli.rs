@@ -24,6 +24,9 @@ pub(crate) enum Commands {
     /// Set-up repository for use with git-agenix
     Init,
 
+    /// Display configuration status information
+    Status,
+
     /// Configure encryption settings
     Config {
         #[clap(flatten)]

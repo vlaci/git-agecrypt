@@ -24,15 +24,17 @@ fn main() -> Result<()> {
             println!("Success!");
             Ok(())
         },
+        cli::Commands::Status => {
+            let status = public::status(repo)?;
+            print_identities(status.identities);
+            Ok(())
+        }
         cli::Commands::Config { cfg } => {
             match public::config(repo, cfg.into())? {
                 public::ConfigResult::Succeeded => println!("Success!"),
                 public::ConfigResult::NothingDone => (),
                 public::ConfigResult::Identities(identities) => {
-                    println!("The following identities are currently configured:");
-                    for i in identities {
-                        println!("    {}", i);
-                    }
+                    print_identities(identities);
                 }
             }
             Ok(())
@@ -44,4 +46,11 @@ fn main() -> Result<()> {
         }
     }?;
     Ok(())
+}
+
+fn print_identities(identities: Vec<String>) {
+    println!("The following identities are currently configured:");
+    for i in identities {
+        println!("    {}", i);
+    }
 }

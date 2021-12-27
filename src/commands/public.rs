@@ -41,8 +41,18 @@ pub(crate) fn config(repo: git::Repository, cfg: ConfigCommand) -> Result<Config
     match cfg {
         ConfigCommand::AddIdentity(identity) => add_identity(repo, identity),
         ConfigCommand::RemoveIdentity(identity) => remove_identity(repo, identity),
-        ConfigCommand::ListIdentities => list_identities(repo),
+        ConfigCommand::ListIdentities => Ok(ConfigResult::Identities(list_identities(repo)?)),
     }
+}
+
+pub(crate) struct StatusResult {
+    pub identities: Vec<String>,
+}
+
+pub(crate) fn status(repo: git::Repository) -> Result<StatusResult> {
+    let identities = list_identities(repo)?;
+
+    Ok(StatusResult { identities })
 }
 
 fn add_identity(repo: git::Repository, identity: PathBuf) -> Result<ConfigResult> {
@@ -61,7 +71,7 @@ fn remove_identity(repo: git::Repository, identity: PathBuf) -> Result<ConfigRes
         .into())
 }
 
-fn list_identities(repo: git::Repository) -> Result<ConfigResult> {
+fn list_identities(repo: git::Repository) -> Result<Vec<String>> {
     let identities = repo.list_config("identity")?;
     let mut rv = Vec::with_capacity(identities.len());
 
@@ -80,5 +90,5 @@ fn list_identities(repo: git::Repository) -> Result<ConfigResult> {
         }
     }
 
-    Ok(ConfigResult::Identities(rv))
+    Ok(rv)
 }
