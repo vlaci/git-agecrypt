@@ -17,31 +17,13 @@ pub(crate) trait Repository {
 
     fn list_config(&self, key: &str) -> Result<Vec<String>>;
 
-    fn get_config(&self, key: &str) -> Option<ConfigValue>;
+    fn get_config(&self, key: &str) -> Option<String>;
 
-    fn set_config(&self, key: &str, value: ConfigValue) -> Result<bool>;
+    fn set_config(&self, key: &str, value: &str) -> Result<bool>;
 }
 
 pub(crate) struct LibGit2Repository {
     inner: git2::Repository,
-}
-
-#[derive(PartialEq)]
-pub(crate) enum ConfigValue {
-    Bool(bool),
-    String(String),
-}
-
-impl From<bool> for ConfigValue {
-    fn from(b: bool) -> Self {
-        Self::Bool(b)
-    }
-}
-
-impl From<String> for ConfigValue {
-    fn from(s: String) -> Self {
-        Self::String(s)
-    }
 }
 
 impl LibGit2Repository {
@@ -122,24 +104,16 @@ impl Repository for LibGit2Repository {
         Ok(entries)
     }
 
-    fn get_config(&self, key: &str) -> Option<ConfigValue> {
+    fn get_config(&self, key: &str) -> Option<String> {
         let cfg = self.inner.config().ok()?;
-        if let Ok(value) = cfg.get_bool(key) {
-            Some(value.into())
-        } else if let Ok(value) = cfg.get_string(key) {
-            Some(value.into())
-        } else {
-            None
-        }
+        cfg.get_string(key).ok()
     }
 
-    fn set_config(&self, key: &str, value: ConfigValue) -> Result<bool> {
+    fn set_config(&self, key: &str, value: &str) -> Result<bool> {
         let mut cfg = self.inner.config()?;
         let contains = self.get_config(key).map(|v| v == value).unwrap_or(false);
-        match value {
-            ConfigValue::Bool(b) => cfg.set_bool(key, b)?,
-            ConfigValue::String(s) => cfg.set_str(key, &s)?,
-        }
+        cfg.set_str(key, value)?;
+
         Ok(!contains)
     }
 }
