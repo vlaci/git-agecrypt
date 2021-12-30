@@ -16,17 +16,11 @@ pub(crate) trait Context {
 
     fn sidecar_directory(&self) -> PathBuf;
 
-    fn add_config(&self, key: &str, value: &str) -> Result<bool>;
+    fn configure_filter(&self) -> Result<()>;
 
-    fn remove_config(&self, key: &str, value: &str) -> Result<bool>;
+    fn deconfigure_filter(&self) -> Result<()>;
 
-    fn list_config(&self, key: &str) -> Result<Vec<String>>;
-
-    fn configure_filter(&self) -> Result<bool>;
-
-    fn deconfigure_filter(&self) -> Result<bool>;
-
-    fn remove_sidecar_files(&self) -> Result<bool>;
+    fn remove_sidecar_files(&self) -> Result<()>;
 }
 
 struct ContextWrapper<R: git::Repository> {
@@ -61,46 +55,33 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
         self.repo.path().join("git-agenix")
     }
 
-    fn add_config(&self, key: &str, value: &str) -> Result<bool> {
-        let entry_name = format!("{}.{}", CONFIG_PATH, key);
-        self.repo.add_config(&entry_name, value)
-    }
-
-    fn remove_config(&self, key: &str, value: &str) -> Result<bool> {
-        let entry_name = format!("{}.{}", CONFIG_PATH, key);
-
-        self.repo.remove_config(&entry_name, value)
-    }
-
-    fn list_config(&self, key: &str) -> Result<Vec<String>> {
-        let _entry_name = format!("{}.{}", CONFIG_PATH, key);
-        self.repo.list_config(key)
-    }
-
-    fn configure_filter(&self) -> Result<bool> {
+    fn configure_filter(&self) -> Result<()> {
         let exe = std::env::current_exe()?;
         let exe = exe.to_string_lossy();
-        let mut changed = false;
 
-        changed |= self.repo
-            .set_config("filter.git-agenix.required", true.into())?;
-        changed |= self.repo.set_config(
-            "filter.git-agenix.smudge",
-            format!("{} smudge -f %f", exe).into(),
+        exist_ok(
+            self.repo.set_config("filter.git-agenix.required", "true"),
+            (),
         )?;
-        changed |= self.repo.set_config(
-            "filter.git-agenix.clean",
-            format!("{} clean -f %f", exe).into(),
+        exist_ok(
+            self.repo
+                .set_config("filter.git-agenix.smudge", &format!("{} smudge -f %f", exe)),
+            (),
         )?;
-        changed |= self.repo.set_config(
-            "diff.git-agenix.textconv",
-            format!("{} textconv", exe).into(),
+        exist_ok(
+            self.repo
+                .set_config("filter.git-agenix.clean", &format!("{} clean -f %f", exe)),
+            (),
         )?;
-        Ok(changed)
+        exist_ok(
+            self.repo
+                .set_config("diff.git-agenix.textconv", &format!("{} textconv", exe)),
+            (),
+        )?;
+        Ok(())
     }
 
-    fn deconfigure_filter(&self) -> Result<bool> {
-        let mut changed = false;
+    fn deconfigure_filter(&self) -> Result<()> {
         // Unfortunately there is no `git config --remove-section <section>` equivalent in libgit2
         let mut command = process::Command::new("git");
         command
@@ -119,8 +100,6 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
             );
         }
 
-        changed |= output.status.success();
-
         let mut command = process::Command::new("git");
         command
             .arg("config")
@@ -138,21 +117,19 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
             );
         }
 
-        changed |= output.status.success();
-
-        Ok(changed)
+        Ok(())
     }
 
-    fn remove_sidecar_files(&self) -> Result<bool> {
+    fn remove_sidecar_files(&self) -> Result<()> {
         let dir = self.sidecar_directory();
-        let removed = fs::remove_dir_all(dir).map(|_| true).or_else(|err| {
+        fs::remove_dir_all(dir).or_else(|err| {
             if err.kind() == std::io::ErrorKind::NotFound {
-                Ok(false)
+                Ok(())
             } else {
                 Err(err)
             }
         })?;
-        Ok(removed)
+        Ok(())
     }
 }
 

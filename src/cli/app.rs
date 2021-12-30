@@ -1,9 +1,8 @@
 use anyhow::Result;
 
-use crate::{
-    commands::{internal, public},
-    ctx::Context,
-};
+use crate::{cli::args::ConfigCommand, ctx::Context};
+
+use super::{internal, public};
 
 use super::args::{Args, Commands, InternalCommands, PublicCommands};
 
@@ -14,10 +13,7 @@ pub(crate) fn run(args: Args, ctx: impl Context) -> Result<()> {
     }
 }
 
-fn run_internal_command(
-    commands: InternalCommands,
-    ctx: impl Context,
-) -> Result<(), anyhow::Error> {
+fn run_internal_command(commands: InternalCommands, ctx: impl Context) -> Result<()> {
     let cmd = internal::CommandContext { ctx };
     match commands {
         InternalCommands::Clean { secrets_nix, file } => cmd.clean(&secrets_nix, &file),
@@ -26,82 +22,23 @@ fn run_internal_command(
     }
 }
 
-fn run_public_command(commands: PublicCommands, ctx: impl Context) -> Result<(), anyhow::Error> {
-    let cmd = public::CommandContext { ctx };
+fn run_public_command(commands: PublicCommands, ctx: impl Context) -> Result<()> {
+    let cmd = public::CommandContext::new(ctx);
     match commands {
         PublicCommands::Init => {
-            let result = cmd.init()?;
-            print!("{}", result);
-            Ok(())
+            cmd.init()?;
         }
         PublicCommands::Deinit => {
-            let result = cmd.deinit()?;
-            print!("{}", result);
-            Ok(())
+            cmd.deinit()?;
         }
         PublicCommands::Status => {
-            let result = cmd.status()?;
-            print!("{}", result);
-            Ok(())
+            cmd.status()?;
         }
-        PublicCommands::Config { cfg } => {
-            print!("{}", cmd.config(cfg.into())?);
-            Ok(())
-        }
+        PublicCommands::Config { cfg } => match ConfigCommand::from(cfg) {
+            ConfigCommand::AddIdentity(path) => cmd.add_identity(path)?,
+            ConfigCommand::RemoveIdentity(path) => cmd.remove_identity(path)?,
+            ConfigCommand::ListIdentities => cmd.list_identities()?,
+        },
     }
-}
-
-impl<T: Display> Display for public::Outcome<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            public::Outcome::Changes(c) => write!(f, "Changes made:\n{}", c),
-            public::Outcome::NoChanges => writeln!(f, "No changes needed"),
-            public::Outcome::Output(o) => write!(f, "{}", o),
-        }
-    }
-}
-
-impl Display for public::NoOutput {
-    fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
-        Ok(())
-    }
-}
-
-impl Display for public::ConfigResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            public::ConfigResult::IdentityAdded => writeln!(f, "Identity added"),
-            public::ConfigResult::IdentityRemoved => writeln!(f, "Identity removed"),
-            public::ConfigResult::Identities(identities) => {
-                write!(f, "{}", identities)
-            }
-        }
-    }
-}
-
-impl Display for public::Identities {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let padding = self.0.iter().map(|i| i.path.len()).max().unwrap_or(0);
-        writeln!(f, "The following identities are currently configured:")?;
-        for i in &self.0 {
-            if let Err(err) = i.is_valid() {
-                writeln!(
-                    f,
-                    "    ⨯ {:padding$} -- {}",
-                    i.path,
-                    err.to_string(),
-                    padding = padding
-                )?;
-            } else {
-                writeln!(f, "    ✓ {}", i.path)?;
-            }
-        }
-        Ok(())
-    }
-}
-
-impl Display for public::StatusResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.identities)
-    }
+    Ok(())
 }

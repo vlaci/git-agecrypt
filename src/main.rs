@@ -1,10 +1,11 @@
 mod age;
 mod cli;
-mod commands;
+mod config;
 mod ctx;
 mod git;
 mod nix;
 
+use anyhow::Result;
 use cli::run;
 
 fn main() -> Result<()> {

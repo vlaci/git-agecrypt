@@ -8,7 +8,13 @@ use std::{
 use anyhow::{anyhow, bail, Result};
 use blake3::Hash;
 
-use crate::{age, ctx::Context, git::Repository, nix};
+use crate::{
+    age,
+    config::{AgeIdentities, Container},
+    ctx::Context,
+    git::Repository,
+    nix,
+};
 
 pub(crate) struct CommandContext<C: Context> {
     pub ctx: C,
@@ -55,13 +61,13 @@ impl<C: Context> CommandContext<C> {
         );
         let result = if hash == old_hash {
             log::debug!("File didn't change since last encryption, loading from git HEAD");
-            self.ctx.repo().get_file_contents(&file)
+            self.ctx.repo().get_file_contents(&file)?
         } else {
             log::debug!("File changed since last encryption, re-encrypting");
             File::create(sidecar)?.write_all(hash.as_bytes())?;
             let rule = load_rule_for(&secrets_nix, file)?;
-            age::encrypt(&rule.public_keys, &mut &contents[..])
-        }?;
+            age::encrypt(&rule.public_keys, &mut &contents[..])?
+        };
         Ok(io::stdout().write_all(&result)?)
     }
 
@@ -111,7 +117,12 @@ impl<C: Context> CommandContext<C> {
     ) -> Result<()> {
         log::info!("Decrypting file to show in diff");
 
-        let mut all_identities = self.ctx.list_config("identities")?;
+        let mut all_identities: Vec<String> = AgeIdentities::new(&self.ctx)
+            .list()?
+            .into_iter()
+            .map(|i| i.path)
+            .collect();
+
         all_identities.extend(
             identities
                 .iter()

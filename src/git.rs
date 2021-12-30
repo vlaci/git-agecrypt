@@ -1,6 +1,25 @@
 use std::{env, path::Path};
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, Context};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("{:?} already exists.", .0)]
+    AlreadyExists(String),
+    #[error("{:?} doesn't exist.", .0)]
+    NotExist(String),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+impl From<git2::Error> for Error {
+    fn from(err: git2::Error) -> Self {
+        Self::Other(anyhow!(err))
+    }
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub(crate) trait Repository {
     fn workdir(&self) -> &Path;
@@ -9,17 +28,17 @@ pub(crate) trait Repository {
 
     fn get_file_contents(&self, path: &Path) -> Result<Vec<u8>>;
 
-    fn add_config(&self, key: &str, value: &str) -> Result<bool>;
+    fn add_config(&self, key: &str, value: &str) -> Result<()>;
 
     fn contains_config(&self, key: &str, value: &str) -> bool;
 
-    fn remove_config(&self, key: &str, value: &str) -> Result<bool>;
+    fn remove_config(&self, key: &str, value: &str) -> Result<()>;
 
     fn list_config(&self, key: &str) -> Result<Vec<String>>;
 
-    fn get_config(&self, key: &str) -> Option<String>;
+    fn get_config(&self, key: &str) -> Result<String>;
 
-    fn set_config(&self, key: &str, value: &str) -> Result<bool>;
+    fn set_config(&self, key: &str, value: &str) -> Result<()>;
 }
 
 pub(crate) struct LibGit2Repository {
@@ -28,9 +47,12 @@ pub(crate) struct LibGit2Repository {
 
 impl LibGit2Repository {
     pub(crate) fn from_current_dir() -> Result<Self> {
-        let inner = git2::Repository::discover(env::current_dir()?)?;
+        let path = env::current_dir()?;
+        let inner = git2::Repository::discover(&path).map_err(|_| {
+            Error::RepositoryError("Not a git repository".to_string(), path.clone())
+        })?;
         if inner.is_bare() {
-            bail!("Cannot be used in a bare repository");
+            return Err(anyhow!("Bare repositories are unsupported {}", path.display(),).into());
         }
         Ok(Self { inner })
     }
@@ -65,16 +87,16 @@ impl Repository for LibGit2Repository {
         Ok(contents.as_blob().unwrap().content().into())
     }
 
-    fn add_config(&self, key: &str, value: &str) -> Result<bool> {
+    fn add_config(&self, key: &str, value: &str) -> Result<()> {
         if self.contains_config(key, value) {
-            return Ok(false);
+            return Err(Error::AlreadyExists(value.into()));
         }
 
         let mut cfg = self.inner.config()?;
 
         cfg.set_multivar(key, "^$", value)?;
 
-        Ok(true)
+        Ok(())
     }
 
     fn contains_config(&self, key: &str, value: &str) -> bool {
@@ -82,16 +104,16 @@ impl Repository for LibGit2Repository {
         entries.iter().any(|e| e == value)
     }
 
-    fn remove_config(&self, key: &str, value: &str) -> Result<bool> {
+    fn remove_config(&self, key: &str, value: &str) -> Result<()> {
         if !self.contains_config(key, value) {
-            return Ok(false);
+            return Err(Error::NotExist(key.into()));
         }
 
         let mut cfg = self.inner.config()?;
         let pattern = format!("^{}$", regex::escape(value));
         cfg.remove_multivar(key, &pattern)?;
 
-        Ok(true)
+        Ok(())
     }
 
     fn list_config(&self, key: &str) -> Result<Vec<String>> {
@@ -104,16 +126,19 @@ impl Repository for LibGit2Repository {
         Ok(entries)
     }
 
-    fn get_config(&self, key: &str) -> Option<String> {
-        let cfg = self.inner.config().ok()?;
-        cfg.get_string(key).ok()
+    fn get_config(&self, key: &str) -> Result<String> {
+        let cfg = self.inner.config()?;
+        cfg.get_string(key)
+            .map_err(|_e| Error::NotExist(key.into()))
     }
 
-    fn set_config(&self, key: &str, value: &str) -> Result<bool> {
+    fn set_config(&self, key: &str, value: &str) -> Result<()> {
         let mut cfg = self.inner.config()?;
-        let contains = self.get_config(key).map(|v| v == value).unwrap_or(false);
-        cfg.set_str(key, value)?;
-
-        Ok(!contains)
+        self.get_config(key)
+            .and_then(|_| Err(Error::AlreadyExists(key.into())))
+            .or_else(|_| {
+                cfg.set_str(key, value)?;
+                Ok(())
+            })
     }
 }
