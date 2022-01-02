@@ -44,9 +44,20 @@ pub(crate) fn encrypt(
     public_keys: &[impl AsRef<str>],
     cleartext: &mut impl Read,
 ) -> Result<Vec<u8>> {
+    let recipients = load_public_keys(public_keys)?;
+
+    let encryptor = Encryptor::with_recipients(recipients);
+    let mut encrypted = vec![];
+
+    let mut writer = encryptor.wrap_output(&mut encrypted)?;
+    io::copy(cleartext, &mut writer)?;
+    writer.finish()?;
+    Ok(encrypted)
+}
+
+fn load_public_keys(public_keys: &[impl AsRef<str>]) -> Result<Vec<Box<dyn Recipient>>> {
     let mut recipients: Vec<Box<dyn Recipient>> = vec![];
     let mut plugin_recipients = vec![];
-    let callbacks = UiCallbacks {};
 
     for pubk in public_keys {
         if let Ok(pk) = pubk.as_ref().parse::<age::x25519::Recipient>() {
@@ -59,19 +70,19 @@ pub(crate) fn encrypt(
             bail!("Invalid recipient");
         }
     }
+    let callbacks = UiCallbacks {};
 
     for plugin_name in plugin_recipients.iter().map(|r| r.plugin()) {
         let recipient = RecipientPluginV1::new(plugin_name, &plugin_recipients, &[], callbacks)?;
         recipients.push(Box::new(recipient));
     }
 
-    let encryptor = Encryptor::with_recipients(recipients);
-    let mut encrypted = vec![];
+    Ok(recipients)
+}
 
-    let mut writer = encryptor.wrap_output(&mut encrypted)?;
-    io::copy(cleartext, &mut writer)?;
-    writer.finish()?;
-    Ok(encrypted)
+pub(crate) fn validate_public_keys(public_keys: &[impl AsRef<str>]) -> Result<()> {
+    load_public_keys(public_keys)?;
+    Ok(())
 }
 
 pub(crate) fn validate_identity(identity: impl AsRef<Path>) -> Result<()> {

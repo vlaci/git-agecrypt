@@ -2,7 +2,7 @@ use crate::{ctx::Context, git::Repository};
 
 use super::{Container, Result};
 
-const CONFIG_PATH: &str = "git-agenix.config";
+const CONFIG_PATH: &str = "git-agecrypt.config";
 
 pub struct GitConfigEntry {
     value: String,

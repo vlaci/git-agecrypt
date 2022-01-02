@@ -1,10 +1,10 @@
 use anyhow::Result;
 
-use crate::{cli::args::ConfigCommand, ctx::Context};
+use crate::ctx::Context;
 
 use super::{internal, public};
 
-use super::args::{Args, Commands, InternalCommands, PublicCommands};
+use super::args::{Args, Commands, InternalCommands, ModifyConfig, PublicCommands, QueryConfig};
 
 pub(crate) fn run(args: Args, ctx: impl Context) -> Result<()> {
     match args.command {
@@ -16,7 +16,7 @@ pub(crate) fn run(args: Args, ctx: impl Context) -> Result<()> {
 fn run_internal_command(commands: InternalCommands, ctx: impl Context) -> Result<()> {
     let cmd = internal::CommandContext { ctx };
     match commands {
-        InternalCommands::Clean { secrets_nix, file } => cmd.clean(&secrets_nix, &file),
+        InternalCommands::Clean { file } => cmd.clean(&file),
         InternalCommands::Smudge { identities, file } => cmd.smudge(&identities, &file),
         InternalCommands::Textconv { identities, path } => cmd.textconv(&identities, &path),
     }
@@ -34,10 +34,23 @@ fn run_public_command(commands: PublicCommands, ctx: impl Context) -> Result<()>
         PublicCommands::Status => {
             cmd.status()?;
         }
-        PublicCommands::Config { cfg } => match ConfigCommand::from(cfg) {
-            ConfigCommand::AddIdentity(path) => cmd.add_identity(path)?,
-            ConfigCommand::RemoveIdentity(path) => cmd.remove_identity(path)?,
-            ConfigCommand::ListIdentities => cmd.list_identities()?,
+        PublicCommands::Config(cfg) => match cfg {
+            super::args::ConfigCommands::Add(what) => match ModifyConfig::from(what) {
+                ModifyConfig::Identity(id) => cmd.add_identity(id)?,
+                ModifyConfig::Recipient(paths, recipients) => {
+                    cmd.add_recipients(recipients, paths)?
+                }
+            },
+            super::args::ConfigCommands::Remove(what) => match ModifyConfig::from(what) {
+                ModifyConfig::Identity(id) => cmd.remove_identity(id)?,
+                ModifyConfig::Recipient(paths, recipients) => {
+                    cmd.remove_recipients(recipients, paths)?
+                }
+            },
+            super::args::ConfigCommands::List(what) => match QueryConfig::from(what) {
+                QueryConfig::Identities => cmd.list_identities()?,
+                QueryConfig::Recipients => cmd.list_recipients()?,
+            },
         },
     }
     Ok(())

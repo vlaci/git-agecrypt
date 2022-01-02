@@ -1,11 +1,10 @@
 use std::{
-    fmt::Debug,
-    fs::{self, File},
+    fs::File,
     io::{self, Read, Seek, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use blake3::Hash;
 
 use crate::{
@@ -13,7 +12,6 @@ use crate::{
     config::{AgeIdentities, Container},
     ctx::Context,
     git::Repository,
-    nix,
 };
 
 pub(crate) struct CommandContext<C: Context> {
@@ -21,11 +19,7 @@ pub(crate) struct CommandContext<C: Context> {
 }
 
 impl<C: Context> CommandContext<C> {
-    pub(crate) fn clean(
-        &self,
-        secrets_nix: impl AsRef<Path>,
-        file: impl AsRef<Path>,
-    ) -> Result<()> {
+    pub(crate) fn clean(&self, file: impl AsRef<Path>) -> Result<()> {
         log::info!("Encrypting file");
         let file = self.ctx.repo().workdir().join(file);
         let sidecar = self.ctx.get_sidecar(&file, "hash")?;
@@ -64,9 +58,13 @@ impl<C: Context> CommandContext<C> {
             self.ctx.repo().get_file_contents(&file)?
         } else {
             log::debug!("File changed since last encryption, re-encrypting");
+
+            let cfg = self.ctx.config()?;
+            let public_keys = cfg.get_public_keys(&file)?;
+
+            let res = age::encrypt(public_keys, &mut &contents[..])?;
             File::create(sidecar)?.write_all(hash.as_bytes())?;
-            let rule = load_rule_for(&secrets_nix, file)?;
-            age::encrypt(&rule.public_keys, &mut &contents[..])?
+            res
         };
         Ok(io::stdout().write_all(&result)?)
     }
@@ -142,62 +140,4 @@ impl<C: Context> CommandContext<C> {
         };
         Ok(io::stdout().write_all(&result)?)
     }
-}
-
-#[derive(Debug)]
-struct AgenixRule {
-    pub path: PathBuf,
-    pub public_keys: Vec<String>,
-}
-
-fn load_rule_for(rules_path: impl AsRef<Path>, for_file: impl AsRef<Path>) -> Result<AgenixRule> {
-    let val = nix::eval_file(&rules_path)?;
-    let dir = fs::canonicalize(rules_path.as_ref().parent().unwrap())?;
-
-    for (pth, v) in val
-        .as_object()
-        .ok_or(anyhow!("Expected to contain objects"))?
-        .iter()
-    {
-        let abs_path = dir.join(pth);
-        if abs_path != for_file.as_ref() {
-            log::debug!(
-                "Encryption rule doesn't match; candidate={:?}, target={:?}",
-                abs_path,
-                for_file.as_ref()
-            );
-            continue;
-        }
-        log::debug!("Encryption rule matches; target={:?}", abs_path);
-        let public_keys = v
-            .as_object()
-            .ok_or(anyhow!("Expected to contain objects"))?
-            .get("publicKeys")
-            .ok_or(anyhow!("publicKeys attribute missing"))?
-            .as_array()
-            .ok_or(anyhow!("publicKeys must be a list"))?
-            .iter()
-            .map(|k| {
-                Ok(k.as_str()
-                    .ok_or(anyhow!("publicKeys should be list of strings"))?
-                    .to_string())
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        log::debug!(
-            "Collected public keys; target={:?}, public_keys={:?}",
-            abs_path,
-            public_keys
-        );
-        return Ok(AgenixRule {
-            path: abs_path,
-            public_keys,
-        });
-    }
-
-    bail!(
-        "No rule in {} for {}",
-        rules_path.as_ref().to_string_lossy(),
-        for_file.as_ref().to_string_lossy()
-    );
 }

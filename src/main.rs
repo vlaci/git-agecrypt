@@ -3,7 +3,6 @@ mod cli;
 mod config;
 mod ctx;
 mod git;
-mod nix;
 
 use anyhow::Result;
 use cli::run;

@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Result;
 
-use crate::git;
+use crate::{config::AppConfig, git};
 
 pub(crate) trait Context {
     type Repo: git::Repository;
@@ -21,6 +21,8 @@ pub(crate) trait Context {
     fn deconfigure_filter(&self) -> Result<()>;
 
     fn remove_sidecar_files(&self) -> Result<()>;
+
+    fn config(&self) -> Result<AppConfig>;
 }
 
 struct ContextWrapper<R: git::Repository> {
@@ -52,7 +54,7 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
     }
 
     fn sidecar_directory(&self) -> PathBuf {
-        self.repo.path().join("git-agenix")
+        self.repo.path().join("git-agecrypt")
     }
 
     fn configure_filter(&self) -> Result<()> {
@@ -60,22 +62,24 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
         let exe = exe.to_string_lossy();
 
         exist_ok(
-            self.repo.set_config("filter.git-agenix.required", "true"),
+            self.repo.set_config("filter.git-agecrypt.required", "true"),
+            (),
+        )?;
+        exist_ok(
+            self.repo.set_config(
+                "filter.git-agecrypt.smudge",
+                &format!("{} smudge -f %f", exe),
+            ),
             (),
         )?;
         exist_ok(
             self.repo
-                .set_config("filter.git-agenix.smudge", &format!("{} smudge -f %f", exe)),
+                .set_config("filter.git-agecrypt.clean", &format!("{} clean -f %f", exe)),
             (),
         )?;
         exist_ok(
             self.repo
-                .set_config("filter.git-agenix.clean", &format!("{} clean -f %f", exe)),
-            (),
-        )?;
-        exist_ok(
-            self.repo
-                .set_config("diff.git-agenix.textconv", &format!("{} textconv", exe)),
+                .set_config("diff.git-agecrypt.textconv", &format!("{} textconv", exe)),
             (),
         )?;
         Ok(())
@@ -87,7 +91,7 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
         command
             .arg("config")
             .arg("--remove-section")
-            .arg("filter.git-agenix");
+            .arg("filter.git-agecrypt");
         let output = command.output()?;
 
         if !output.status.success() {
@@ -104,7 +108,7 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
         command
             .arg("config")
             .arg("--remove-section")
-            .arg("diff.git-agenix");
+            .arg("diff.git-agecrypt");
         let output = command.output()?;
 
         if !output.status.success() {
@@ -130,6 +134,10 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
             }
         })?;
         Ok(())
+    }
+
+    fn config(&self) -> Result<AppConfig> {
+        Ok(AppConfig::load(&PathBuf::from("git-agecrypt.toml"))?)
     }
 }
 

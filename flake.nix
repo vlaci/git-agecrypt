@@ -7,7 +7,7 @@
   outputs = { self, nixpkgs, flake-utils, ... }@inputs:
     rec {
       overlay = final: prev: {
-        git-agenix = final.callPackage ./default.nix {};
+        git-agecrypt = final.callPackage ./default.nix {};
       };
     } //
     flake-utils.lib.eachDefaultSystem (system:
@@ -18,7 +18,7 @@
         };
       in
       {
-        defaultPackage = pkgs.git-agenix;
+        defaultPackage = pkgs.git-agecrypt;
         devShell = import ./shell.nix { inherit pkgs; };
       });
 }

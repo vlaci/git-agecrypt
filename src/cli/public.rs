@@ -33,7 +33,10 @@ impl<C: Context> CommandContext<C> {
     }
 
     pub(crate) fn status(&self) -> Result<()> {
-        self.list_identities()
+        self.list_identities()?;
+        println!();
+        self.list_recipients()?;
+        Ok(())
     }
 
     pub(crate) fn add_identity(&self, identity: PathBuf) -> Result<()> {
@@ -57,6 +60,33 @@ impl<C: Context> CommandContext<C> {
             } else {
                 println!("    ✓ {}", i.path);
             }
+        }
+        Ok(())
+    }
+
+    pub fn add_recipients(&self, recipients: Vec<String>, paths: Vec<PathBuf>) -> Result<()> {
+        let mut cfg = self.ctx.config()?;
+
+        cfg.add(recipients, paths)?;
+
+        cfg.save()?;
+        Ok(())
+    }
+
+    pub fn remove_recipients(&self, recipients: Vec<String>, paths: Vec<PathBuf>) -> Result<()> {
+        let mut cfg = self.ctx.config()?;
+        cfg.remove(recipients, paths)?;
+        cfg.save()?;
+        Ok(())
+    }
+
+    pub fn list_recipients(&self) -> Result<()> {
+        let cfg = self.ctx.config()?;
+        let recipients = cfg.list();
+
+        println!("The following recipients are configured:");
+        for (p, r) in recipients {
+            println!("    {}: {}", p, r);
         }
         Ok(())
     }

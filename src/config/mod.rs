@@ -1,7 +1,9 @@
 mod age_identities;
+mod app;
 mod git;
 
 pub(crate) use age_identities::{AgeIdentities, AgeIdentity};
+pub(crate) use app::AppConfig;
 
 use thiserror::Error;
 

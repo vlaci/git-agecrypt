@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{AppSettings, Parser, Subcommand};
+use clap::{AppSettings, ArgGroup, Parser, Subcommand};
 
 /// Transparently encrypt/decrypt age secrets
 #[derive(Parser)]
@@ -27,51 +27,134 @@ pub enum Commands {
 
 #[derive(Subcommand)]
 pub enum PublicCommands {
-    /// Set-up repository for use with git-agenix
+    /// Set-up repository for use with git-agecrypt
     Init,
 
     /// Display configuration status information
     Status,
 
     /// Configure encryption settings
-    Config {
-        #[clap(flatten)]
-        cfg: Config,
-    },
+    #[clap(subcommand)]
+    Config(ConfigCommands),
 
     /// Remove repository specific configuration
     Deinit,
 }
 
+#[derive(Subcommand)]
+pub enum ConfigCommands {
+    /// Add a configuration entry
+    Add(AddConfig),
+
+    /// Remove a configuration entry
+    Remove(RemoveConfig),
+
+    /// List configuration entries
+    List(ConfigType),
+}
+
 #[derive(clap::Args)]
-pub struct Config {
-    /// Register identity usable for decryption
+#[clap(group(
+    ArgGroup::new("config")
+        .args(&["identity", "recipient"])
+        .required(true)
+))]
+#[clap(group(
+    ArgGroup::new("rec")
+        .args(&["recipient"])
+        .requires("path")
+))]
+pub struct AddConfig {
+    /// Identity usable for decryption
     #[clap(short, long, group = "config")]
-    add_identity: Option<PathBuf>,
+    identity: Option<PathBuf>,
 
-    /// Remove registered identity
+    /// Recipient for encryption
     #[clap(short, long, group = "config")]
-    remove_identity: Option<PathBuf>,
+    recipient: Option<Vec<String>>,
 
-    /// List registered identities
-    #[clap(short, long, group = "config")]
-    list_identities: bool,
+    /// Path to encrypt for the given recipient
+    #[clap(short, long)]
+    path: Option<Vec<PathBuf>>,
 }
 
-pub(crate) enum ConfigCommand {
-    AddIdentity(PathBuf),
-    RemoveIdentity(PathBuf),
-    ListIdentities,
+pub(crate) enum ModifyConfig {
+    Identity(PathBuf),
+    Recipient(Vec<PathBuf>, Vec<String>),
 }
 
-impl From<Config> for ConfigCommand {
-    fn from(val: Config) -> Self {
-        if let Some(identity) = val.add_identity {
-            Self::AddIdentity(identity)
-        } else if let Some(identity) = val.remove_identity {
-            Self::RemoveIdentity(identity)
-        } else if val.list_identities {
-            Self::ListIdentities
+impl From<AddConfig> for ModifyConfig {
+    fn from(val: AddConfig) -> Self {
+        if let Some(identity) = val.identity {
+            Self::Identity(identity)
+        } else if let Some(recipients) = val.recipient {
+            Self::Recipient(val.path.unwrap(), recipients)
+        } else {
+            panic!("Misconfigured config parser")
+        }
+    }
+}
+
+#[derive(clap::Args)]
+#[clap(group(
+    ArgGroup::new("config")
+        .args(&["identity", "recipient"])
+))]
+pub struct RemoveConfig {
+    /// Identity usable for decryption
+    #[clap(short, long, group = "config")]
+    identity: Option<PathBuf>,
+
+    /// Recipient for encryption
+    #[clap(short, long, group = "config")]
+    recipient: Option<Vec<String>>,
+
+    /// Path to encrypt for the given recipient
+    #[clap(short, long)]
+    path: Option<Vec<PathBuf>>,
+}
+
+impl From<RemoveConfig> for ModifyConfig {
+    fn from(val: RemoveConfig) -> Self {
+        if let Some(identity) = val.identity {
+            Self::Identity(identity)
+        } else if let Some(recipients) = val.recipient {
+            Self::Recipient(val.path.unwrap_or_default(), recipients)
+        } else if let Some(paths) = val.path {
+            Self::Recipient(paths, vec![])
+        } else {
+            panic!("Misconfigured config parser")
+        }
+    }
+}
+
+#[derive(clap::Args)]
+#[clap(group(
+    ArgGroup::new("type")
+        .args(&["identity", "recipient"])
+        .required(true)
+))]
+pub struct ConfigType {
+    /// Identity usable for decryption
+    #[clap(short, long)]
+    identity: bool,
+
+    /// Recipient for encryption
+    #[clap(short, long)]
+    recipient: bool,
+}
+
+pub(crate) enum QueryConfig {
+    Identities,
+    Recipients,
+}
+
+impl From<ConfigType> for QueryConfig {
+    fn from(val: ConfigType) -> Self {
+        if val.identity {
+            Self::Identities
+        } else if val.recipient {
+            Self::Recipients
         } else {
             panic!("Misconfigured config parser")
         }
@@ -83,10 +166,6 @@ pub enum InternalCommands {
     /// Encrypt files for commit
     #[clap(setting(AppSettings::Hidden))]
     Clean {
-        /// Path to secrets.nix
-        #[clap(short, long, default_value = "secrets/secrets.nix")]
-        secrets_nix: PathBuf,
-
         /// File to clean
         #[clap(short, long)]
         file: PathBuf,
