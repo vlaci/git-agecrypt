@@ -2,9 +2,7 @@ use std::{fmt::Display, path::PathBuf};
 
 use anyhow::Context as AnyhowContext;
 
-use crate::ctx::Context;
-
-use super::{git::GitConfig, Container, Result, Validated};
+use super::{git::GitConfigEntry, Container, Result, Validated};
 
 pub(crate) struct AgeIdentity {
     pub path: String,
@@ -37,9 +35,9 @@ impl Validated for AgeIdentity {
     }
 }
 
-pub(crate) struct AgeIdentities<'a, C: Context>(pub GitConfig<'a, C>);
+pub(crate) struct AgeIdentities<C: Container<Item = GitConfigEntry>>(pub C);
 
-impl<C: Context> Container for AgeIdentities<'_, C> {
+impl<C: Container<Item = GitConfigEntry>> Container for AgeIdentities<C> {
     type Item = AgeIdentity;
 
     fn add(&mut self, identity: Self::Item) -> Result<()> {
@@ -62,9 +60,8 @@ impl<C: Context> Container for AgeIdentities<'_, C> {
     }
 }
 
-impl<'a, C: Context> AgeIdentities<'a, C> {
-    pub fn new(ctx: &'a C) -> Self {
-        let cfg = GitConfig::new(ctx, "identity".into());
+impl<C: Container<Item = GitConfigEntry>> AgeIdentities<C> {
+    pub fn new(cfg: C) -> Self {
         Self(cfg)
     }
 }

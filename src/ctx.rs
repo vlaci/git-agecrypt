@@ -5,7 +5,10 @@ use std::{
 
 use anyhow::Result;
 
-use crate::{config::AppConfig, git};
+use crate::{
+    config::{AgeIdentities, AgeIdentity, AppConfig, Container, GitConfig},
+    git,
+};
 
 pub(crate) trait Context {
     type Repo: git::Repository;
@@ -21,6 +24,8 @@ pub(crate) trait Context {
     fn deconfigure_filter(&self) -> Result<()>;
 
     fn remove_sidecar_files(&self) -> Result<()>;
+
+    fn age_identities(&self) -> Box<dyn Container<Item = AgeIdentity> + '_>;
 
     fn config(&self) -> Result<AppConfig>;
 }
@@ -134,6 +139,11 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
             }
         })?;
         Ok(())
+    }
+
+    fn age_identities(&self) -> Box<dyn Container<Item = AgeIdentity> + '_> {
+        let cfg = GitConfig::new(self, "identity".into());
+        Box::new(AgeIdentities::new(cfg))
     }
 
     fn config(&self) -> Result<AppConfig> {

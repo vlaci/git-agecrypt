@@ -7,12 +7,7 @@ use std::{
 use anyhow::{bail, Result};
 use blake3::Hash;
 
-use crate::{
-    age,
-    config::{AgeIdentities, Container},
-    ctx::Context,
-    git::Repository,
-};
+use crate::{age, ctx::Context, git::Repository};
 
 pub(crate) struct CommandContext<C: Context> {
     pub ctx: C,
@@ -115,7 +110,9 @@ impl<C: Context> CommandContext<C> {
     ) -> Result<()> {
         log::info!("Decrypting file to show in diff");
 
-        let mut all_identities: Vec<String> = AgeIdentities::new(&self.ctx)
+        let mut all_identities: Vec<String> = self
+            .ctx
+            .age_identities()
             .list()?
             .into_iter()
             .map(|i| i.path)

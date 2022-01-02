@@ -3,10 +3,7 @@ use std::path::PathBuf;
 use crate::Result;
 
 use crate::config::Validated;
-use crate::{
-    config::{AgeIdentities, AgeIdentity, Container},
-    ctx::Context,
-};
+use crate::{config::AgeIdentity, ctx::Context};
 
 pub(crate) struct CommandContext<C: Context> {
     ctx: C,
@@ -40,17 +37,21 @@ impl<C: Context> CommandContext<C> {
     }
 
     pub(crate) fn add_identity(&self, identity: PathBuf) -> Result<()> {
-        AgeIdentities::new(&self.ctx).add(AgeIdentity::try_from(identity)?)?;
+        self.ctx
+            .age_identities()
+            .add(AgeIdentity::try_from(identity)?)?;
         Ok(())
     }
 
     pub(crate) fn remove_identity(&self, identity: PathBuf) -> Result<()> {
-        AgeIdentities::new(&self.ctx).remove(AgeIdentity::try_from(identity)?)?;
+        self.ctx
+            .age_identities()
+            .remove(AgeIdentity::try_from(identity)?)?;
         Ok(())
     }
 
     fn print_identities(&self) -> Result<()> {
-        let identities = AgeIdentities::new(&self.ctx).list()?;
+        let identities = self.ctx.age_identities().list()?;
 
         let padding = identities.iter().map(|i| i.path.len()).max().unwrap_or(0);
         println!("The following identities are currently configured:");

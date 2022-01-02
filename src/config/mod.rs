@@ -4,6 +4,7 @@ mod git;
 
 pub(crate) use age_identities::{AgeIdentities, AgeIdentity};
 pub(crate) use app::AppConfig;
+pub(crate) use git::GitConfig;
 
 use thiserror::Error;
 
