@@ -35,9 +35,14 @@ impl Validated for AgeIdentity {
     }
 }
 
-pub(crate) struct AgeIdentities<C: Container<Item = GitConfigEntry>>(pub C);
+pub(crate) struct AgeIdentities<C>(pub C)
+where
+    C: Container<Item = GitConfigEntry>;
 
-impl<C: Container<Item = GitConfigEntry>> Container for AgeIdentities<C> {
+impl<C> Container for AgeIdentities<C>
+where
+    C: Container<Item = GitConfigEntry>,
+{
     type Item = AgeIdentity;
 
     fn add(&mut self, identity: Self::Item) -> Result<()> {
@@ -60,7 +65,10 @@ impl<C: Container<Item = GitConfigEntry>> Container for AgeIdentities<C> {
     }
 }
 
-impl<C: Container<Item = GitConfigEntry>> AgeIdentities<C> {
+impl<C> AgeIdentities<C>
+where
+    C: Container<Item = GitConfigEntry>,
+{
     pub fn new(cfg: C) -> Self {
         Self(cfg)
     }

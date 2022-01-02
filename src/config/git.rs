@@ -26,12 +26,18 @@ impl From<GitConfigEntry> for String {
     }
 }
 
-pub(crate) struct GitConfig<'a, C: Context> {
+pub(crate) struct GitConfig<'a, C>
+where
+    C: Context,
+{
     ctx: &'a C,
     ns: String,
 }
 
-impl<'a, C: Context> GitConfig<'a, C> {
+impl<'a, C> GitConfig<'a, C>
+where
+    C: Context,
+{
     pub fn new(ctx: &'a C, ns: String) -> Self {
         Self { ctx, ns }
     }
@@ -47,7 +53,10 @@ impl From<crate::git::Error> for super::Error {
     }
 }
 
-impl<C: Context> Container for GitConfig<'_, C> {
+impl<C> Container for GitConfig<'_, C>
+where
+    C: Context,
+{
     type Item = GitConfigEntry;
 
     fn add(&mut self, item: Self::Item) -> Result<()> {
