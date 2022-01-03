@@ -66,15 +66,15 @@ pub enum ConfigCommands {
 ))]
 pub struct AddConfig {
     /// Identity usable for decryption
-    #[clap(short, long, group = "config")]
+    #[clap(short, long, multiple_values = true, group = "config")]
     identity: Option<PathBuf>,
 
     /// Recipient for encryption
-    #[clap(short, long, group = "config")]
+    #[clap(short, long, multiple_values = true, group = "config")]
     recipient: Option<Vec<String>>,
 
     /// Path to encrypt for the given recipient
-    #[clap(short, long)]
+    #[clap(short, long, multiple_values = true)]
     path: Option<Vec<PathBuf>>,
 }
 
