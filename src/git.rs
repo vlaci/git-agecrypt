@@ -150,6 +150,7 @@ impl Repository for LibGit2Repository {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
     use assert_fs::prelude::*;
     use assert_fs::TempDir;
     use assert_matches::assert_matches;
@@ -157,61 +158,64 @@ mod tests {
 
     use super::*;
 
-    fn setup_git_repo() -> TempDir {
-        let dir = TempDir::new().unwrap();
-        cmd!("git", "init").dir(dir.path()).run().unwrap();
-        dir
+    fn setup_git_repo() -> Result<TempDir> {
+        let dir = TempDir::new()?;
+        cmd!("git", "init").dir(dir.path()).run()?;
+        Ok(dir)
     }
 
     #[test]
-    fn test_repo_can_be_loaded() {
-        let repo_dir = setup_git_repo();
-        let repo = LibGit2Repository::from_dir(repo_dir.path().to_path_buf());
-
-        assert!(repo.is_ok());
-        let repo = repo.unwrap();
+    fn test_repo_can_be_loaded() -> Result<()> {
+        let repo_dir = setup_git_repo()?;
+        let repo = LibGit2Repository::from_dir(repo_dir.path().to_path_buf())?;
 
         assert_eq!(repo.workdir(), repo_dir.path());
+        Ok(())
     }
 
     #[test]
-    fn test_repo_required() {
-        let dir = TempDir::new().unwrap();
-        let repo = LibGit2Repository::from_dir(dir.path().to_path_buf());
-        assert!(matches!(repo, Err(Error::Other(_))));
+    fn test_repo_required() -> Result<()> {
+        let dir = TempDir::new()?;
+        let repo = LibGit2Repository::from_dir(dir.path().to_path_buf()).err();
+        assert_matches!(repo, Some(Error::Other(_)));
+        Ok(())
     }
 
     #[test]
-    fn test_bare_repo_is_error() {
-        let dir = TempDir::new().unwrap();
-        cmd!("git", "init", "--bare").dir(dir.path()).run().unwrap();
-        let repo = LibGit2Repository::from_dir(dir.path().to_path_buf());
-        assert!(matches!(repo, Err(Error::Other(_))));
+    fn test_bare_repo_is_error() -> Result<()> {
+        let dir = TempDir::new()?;
+        cmd!("git", "init", "--bare").dir(dir.path()).run()?;
+        let repo = LibGit2Repository::from_dir(dir.path().to_path_buf()).err();
+        assert_matches!(repo, Some(Error::Other(_)));
+        Ok(())
     }
 
     #[test]
-    fn test_get_file_contents() {
-        let repo_dir = setup_git_repo();
+    fn test_get_file_contents() -> Result<()> {
+        let repo_dir = setup_git_repo()?;
 
         let path = PathBuf::from("subdir/file.txt");
         let file_contents = "file contents";
 
         let repo_file = repo_dir.child(&path);
-        repo_file.touch().unwrap();
-        repo_file.write_str(file_contents).unwrap();
-        cmd!("git", "add", &path)
-            .dir(repo_dir.path())
-            .run()
-            .unwrap();
+        repo_file.touch()?;
+        repo_file.write_str(file_contents)?;
+        cmd!("git", "add", &path).dir(repo_dir.path()).run()?;
         cmd!("git", "commit", "-m", "adding file")
             .dir(repo_dir.path())
-            .run()
-            .unwrap();
+            .run()?;
 
-        let repo = LibGit2Repository::from_dir(repo_dir.path().to_path_buf()).unwrap();
-        assert_matches!(repo.get_file_contents(&repo_dir.join(&path)), Ok(contents) if contents == file_contents.as_bytes());
+        let repo = LibGit2Repository::from_dir(repo_dir.path().to_path_buf())?;
+        assert_eq!(
+            repo.get_file_contents(&repo_dir.join(&path))?,
+            file_contents.as_bytes()
+        );
 
-        repo_file.write_str("additional_contents").unwrap();
-        assert_matches!(repo.get_file_contents(&repo_dir.join(&path)), Ok(contents) if contents == file_contents.as_bytes());
+        repo_file.write_str("additional_contents")?;
+        assert_eq!(
+            repo.get_file_contents(&repo_dir.join(&path))?,
+            file_contents.as_bytes()
+        );
+        Ok(())
     }
 }
