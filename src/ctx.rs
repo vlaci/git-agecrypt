@@ -1,9 +1,10 @@
 use std::{
-    fs,
+    fs::{self, File},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
 };
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 use crate::{
     config::{AgeIdentities, AgeIdentity, AppConfig, Container, GitConfig},
@@ -15,9 +16,13 @@ pub(crate) trait Context {
 
     fn repo(&self) -> &Self::Repo;
 
-    fn get_sidecar(&self, path: &Path, extension: &str) -> Result<PathBuf>;
+    fn store_sidecar(&self, for_path: &Path, extension: &str, content: &[u8]) -> Result<()>;
 
-    fn sidecar_directory(&self) -> PathBuf;
+    fn load_sidecar<const N: usize>(
+        &self,
+        for_path: &Path,
+        extension: &str,
+    ) -> Result<Option<[u8; N]>>;
 
     fn current_exe(&self) -> Result<String>;
 
@@ -36,12 +41,8 @@ impl<R: git::Repository> ContextWrapper<R> {
     pub(crate) fn new(repo: R) -> Self {
         Self { repo }
     }
-}
-
-impl<R: git::Repository> Context for ContextWrapper<R> {
-    type Repo = R;
-    fn repo(&self) -> &R {
-        &self.repo
+    fn sidecar_directory(&self) -> PathBuf {
+        self.repo.path().join("git-agecrypt")
     }
 
     fn get_sidecar(&self, path: &Path, extension: &str) -> Result<PathBuf> {
@@ -55,9 +56,37 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
         rv.set_extension(extension);
         Ok(rv)
     }
+}
 
-    fn sidecar_directory(&self) -> PathBuf {
-        self.repo.path().join("git-agecrypt")
+impl<R: git::Repository> Context for ContextWrapper<R> {
+    type Repo = R;
+    fn repo(&self) -> &R {
+        &self.repo
+    }
+
+    fn store_sidecar(&self, for_path: &Path, extension: &str, content: &[u8]) -> Result<()> {
+        let sidecar_path = self.get_sidecar(for_path, extension)?;
+        File::create(sidecar_path)?.write_all(content)?;
+        Ok(())
+    }
+
+    fn load_sidecar<const N: usize>(
+        &self,
+        for_path: &Path,
+        extension: &str,
+    ) -> Result<Option<[u8; N]>> {
+        let sidecar_path = self.get_sidecar(for_path, extension)?;
+        match File::open(&sidecar_path) {
+            Ok(mut f) => {
+                let mut buff = [0u8; N];
+                f.read_exact(&mut buff)?;
+                Ok(Some(buff))
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => {
+                bail!(e)
+            }
+        }
     }
 
     fn current_exe(&self) -> Result<String> {

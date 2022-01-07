@@ -17,26 +17,13 @@ impl<C: Context> CommandContext<C> {
     pub(crate) fn clean(&self, file: impl AsRef<Path>) -> Result<()> {
         log::info!("Encrypting file");
         let file = self.ctx.repo().workdir().join(file);
-        let sidecar = self.ctx.get_sidecar(&file, "hash")?;
 
-        log::debug!(
-            "Looking for saved has information. target={:?}, sidecar={:?}",
-            file,
-            sidecar
-        );
-        let mut existing_hash = [0u8; 32];
+        log::debug!("Looking for saved has information. target={:?}", file,);
+        let existing_hash: [u8; 32] = self.ctx.load_sidecar(&file, "hash")?.unwrap_or_else(|| {
+            log::debug!("No saved hash file found");
+            Default::default()
+        });
 
-        match File::open(&sidecar) {
-            Ok(mut f) => {
-                f.read_exact(&mut existing_hash)?;
-            }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                log::debug!("No saved hash file found")
-            }
-            Err(e) => {
-                bail!(e);
-            }
-        }
         let mut hasher = blake3::Hasher::new();
         let mut contents = vec![];
         io::stdin().read_to_end(&mut contents)?;
@@ -58,7 +45,7 @@ impl<C: Context> CommandContext<C> {
             let public_keys = cfg.get_public_keys(&file)?;
 
             let res = age::encrypt(public_keys, &mut &contents[..])?;
-            File::create(sidecar)?.write_all(hash.as_bytes())?;
+            self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
             res
         };
         Ok(io::stdout().write_all(&result)?)
@@ -86,16 +73,11 @@ impl<C: Context> CommandContext<C> {
 
         if let Some(rv) = age::decrypt(&all_identities, &mut io::stdin())? {
             log::info!("Decrypted file");
-            let sidecar = self.ctx.get_sidecar(&file, "hash")?;
             let mut hasher = blake3::Hasher::new();
             let hash = hasher.update(&rv).finalize();
 
-            log::debug!(
-                "Storing hash for file; hash={:?} sidecar={:?}",
-                hash.to_hex().as_str(),
-                sidecar
-            );
-            File::create(sidecar)?.write_all(hash.as_bytes())?;
+            log::debug!("Storing hash for file; hash={:?}", hash.to_hex().as_str(),);
+            self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
 
             Ok(io::stdout().write_all(&rv)?)
         } else {
