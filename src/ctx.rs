@@ -66,65 +66,25 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
         let exe = std::env::current_exe()?;
         let exe = exe.to_string_lossy();
 
-        exist_ok(
-            self.repo.set_config("filter.git-agecrypt.required", "true"),
-            (),
-        )?;
-        exist_ok(
-            self.repo.set_config(
-                "filter.git-agecrypt.smudge",
-                &format!("{} smudge -f %f", exe),
-            ),
-            (),
-        )?;
-        exist_ok(
+        ensure_state(self.repo.set_config("filter.git-agecrypt.required", "true"))?;
+        ensure_state(self.repo.set_config(
+            "filter.git-agecrypt.smudge",
+            &format!("{} smudge -f %f", exe),
+        ))?;
+        ensure_state(
             self.repo
                 .set_config("filter.git-agecrypt.clean", &format!("{} clean -f %f", exe)),
-            (),
         )?;
-        exist_ok(
+        ensure_state(
             self.repo
                 .set_config("diff.git-agecrypt.textconv", &format!("{} textconv", exe)),
-            (),
         )?;
         Ok(())
     }
 
     fn deconfigure_filter(&self) -> Result<()> {
-        // Unfortunately there is no `git config --remove-section <section>` equivalent in libgit2
-        let mut command = process::Command::new("git");
-        command
-            .arg("config")
-            .arg("--remove-section")
-            .arg("filter.git-agecrypt");
-        let output = command.output()?;
-
-        if !output.status.success() {
-            log::error!(
-                "Failed to execute command. This may not be an issue; command='{:?}' status='{}', stdout={:?}, stderr={:?}",
-                command,
-                output.status,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-
-        let mut command = process::Command::new("git");
-        command
-            .arg("config")
-            .arg("--remove-section")
-            .arg("diff.git-agecrypt");
-        let output = command.output()?;
-
-        if !output.status.success() {
-            log::error!(
-                "Failed to execute command. This may not be an issue; command='{:?}' status='{}', stdout={:?}, stderr={:?}",
-                command,
-                output.status,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
+        ensure_state(self.repo.remove_config_section("fiter.git-agecrypt"))?;
+        ensure_state(self.repo.remove_config_section("diff.git-agecrypt"))?;
 
         Ok(())
     }
@@ -151,11 +111,12 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
     }
 }
 
-fn exist_ok<T>(result: git::Result<T>, default: T) -> Result<T> {
+fn ensure_state(result: git::Result<()>) -> Result<()> {
     match result {
-        Ok(ok) => Ok(ok),
+        Ok(()) => Ok(()),
         Err(err) => match err {
-            git::Error::AlreadyExists(_) => Ok(default),
+            git::Error::AlreadyExists(_) => Ok(()),
+            git::Error::NotExist(_) => Ok(()),
             err => Err(anyhow::anyhow!(err)),
         },
     }

@@ -1,6 +1,7 @@
 use std::{
-    env,
+    env, io,
     path::{Path, PathBuf},
+    process,
 };
 
 use anyhow::{anyhow, Context};
@@ -18,6 +19,12 @@ pub enum Error {
 
 impl From<git2::Error> for Error {
     fn from(err: git2::Error) -> Self {
+        Self::Other(anyhow!(err))
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Self {
         Self::Other(anyhow!(err))
     }
 }
@@ -42,6 +49,8 @@ pub(crate) trait Repository {
     fn get_config(&self, key: &str) -> Result<String>;
 
     fn set_config(&self, key: &str, value: &str) -> Result<()>;
+
+    fn remove_config_section(&self, key: &str) -> Result<()>;
 }
 
 pub(crate) struct LibGit2Repository {
@@ -143,6 +152,29 @@ impl Repository for LibGit2Repository {
         }
         let mut cfg = self.inner.config()?;
         cfg.set_str(key, value)?;
+        Ok(())
+    }
+
+    fn remove_config_section(&self, key: &str) -> Result<()> {
+        // Unfortunately there is no `git config --remove-section <section>` equivalent in libgit2
+        let mut command = process::Command::new("git");
+        command
+            .current_dir(self.workdir())
+            .arg("config")
+            .arg("--remove-section")
+            .arg(key);
+        let output = command.output()?;
+
+        if !output.status.success() {
+            log::error!(
+                "Failed to execute command. This may not be an issue; command='{:?}' status='{}', stdout={:?}, stderr={:?}",
+                command,
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return Err(Error::NotExist(key.into()));
+        }
         Ok(())
     }
 }
@@ -280,6 +312,9 @@ mod tests {
         assert_matches!(
             git_repo.remove_config("foo.bar", "foobar"), Err(Error::NotExist(value)) if value == "foobar"
         );
+
+        assert_matches!(git_repo.remove_config_section("foo"), Ok(()));
+        assert_eq!(git_repo.list_config("foo")?, [] as [String; 0]);
 
         Ok(())
     }
