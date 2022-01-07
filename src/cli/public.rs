@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
-use crate::Result;
+use crate::{git, Result};
 
 use crate::config::Validated;
+use crate::git::Repository;
 use crate::{config::AgeIdentity, ctx::Context};
 
 pub(crate) struct CommandContext<C: Context> {
@@ -15,12 +16,25 @@ impl<C: Context> CommandContext<C> {
     }
 
     pub(crate) fn init(&self) -> Result<()> {
-        self.ctx.configure_filter()?;
+        let exe = self.ctx.current_exe()?;
+        let repo = self.ctx.repo();
+        ensure_state(repo.set_config("filter.git-agecrypt.required", "true"))?;
+        ensure_state(repo.set_config(
+            "filter.git-agecrypt.smudge",
+            &format!("{} smudge -f %f", exe),
+        ))?;
+        ensure_state(
+            repo.set_config("filter.git-agecrypt.clean", &format!("{} clean -f %f", exe)),
+        )?;
+        ensure_state(repo.set_config("diff.git-agecrypt.textconv", &format!("{} textconv", exe)))?;
         Ok(())
     }
 
     pub(crate) fn deinit(&self) -> Result<()> {
-        self.ctx.deconfigure_filter()?;
+        let repo = self.ctx.repo();
+        ensure_state(repo.remove_config_section("fiter.git-agecrypt"))?;
+        ensure_state(repo.remove_config_section("diff.git-agecrypt"))?;
+
         self.ctx.remove_sidecar_files()?;
         Ok(())
     }
@@ -90,5 +104,15 @@ impl<C: Context> CommandContext<C> {
             println!("    {}: {}", p, r);
         }
         Ok(())
+    }
+}
+fn ensure_state(result: git::Result<()>) -> Result<()> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(err) => match err {
+            git::Error::AlreadyExists(_) => Ok(()),
+            git::Error::NotExist(_) => Ok(()),
+            err => Err(anyhow::anyhow!(err)),
+        },
     }
 }

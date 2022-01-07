@@ -19,9 +19,7 @@ pub(crate) trait Context {
 
     fn sidecar_directory(&self) -> PathBuf;
 
-    fn configure_filter(&self) -> Result<()>;
-
-    fn deconfigure_filter(&self) -> Result<()>;
+    fn current_exe(&self) -> Result<String>;
 
     fn remove_sidecar_files(&self) -> Result<()>;
 
@@ -62,31 +60,10 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
         self.repo.path().join("git-agecrypt")
     }
 
-    fn configure_filter(&self) -> Result<()> {
+    fn current_exe(&self) -> Result<String> {
         let exe = std::env::current_exe()?;
         let exe = exe.to_string_lossy();
-
-        ensure_state(self.repo.set_config("filter.git-agecrypt.required", "true"))?;
-        ensure_state(self.repo.set_config(
-            "filter.git-agecrypt.smudge",
-            &format!("{} smudge -f %f", exe),
-        ))?;
-        ensure_state(
-            self.repo
-                .set_config("filter.git-agecrypt.clean", &format!("{} clean -f %f", exe)),
-        )?;
-        ensure_state(
-            self.repo
-                .set_config("diff.git-agecrypt.textconv", &format!("{} textconv", exe)),
-        )?;
-        Ok(())
-    }
-
-    fn deconfigure_filter(&self) -> Result<()> {
-        ensure_state(self.repo.remove_config_section("fiter.git-agecrypt"))?;
-        ensure_state(self.repo.remove_config_section("diff.git-agecrypt"))?;
-
-        Ok(())
+        Ok(exe.into())
     }
 
     fn remove_sidecar_files(&self) -> Result<()> {
@@ -108,17 +85,6 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
 
     fn config(&self) -> Result<AppConfig> {
         Ok(AppConfig::load(&PathBuf::from("git-agecrypt.toml"))?)
-    }
-}
-
-fn ensure_state(result: git::Result<()>) -> Result<()> {
-    match result {
-        Ok(()) => Ok(()),
-        Err(err) => match err {
-            git::Error::AlreadyExists(_) => Ok(()),
-            git::Error::NotExist(_) => Ok(()),
-            err => Err(anyhow::anyhow!(err)),
-        },
     }
 }
 
