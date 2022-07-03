@@ -113,7 +113,10 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
     }
 
     fn config(&self) -> Result<AppConfig> {
-        Ok(AppConfig::load(&PathBuf::from("git-agecrypt.toml"))?)
+        Ok(AppConfig::load(
+            &PathBuf::from("git-agecrypt.toml"),
+            self.repo.workdir(),
+        )?)
     }
 }
 

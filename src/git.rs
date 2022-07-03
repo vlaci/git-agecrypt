@@ -245,8 +245,12 @@ mod tests {
 
     #[rstest]
     fn test_get_file_contents(git_repo: Repo) -> Result<()> {
-        cmd!("git", "config", "user.email", "author@example.com").dir(git_repo.dir.path()).run()?;
-        cmd!("git", "config", "user.name", "A U Thor").dir(git_repo.dir.path()).run()?;
+        cmd!("git", "config", "user.email", "author@example.com")
+            .dir(git_repo.dir.path())
+            .run()?;
+        cmd!("git", "config", "user.name", "A U Thor")
+            .dir(git_repo.dir.path())
+            .run()?;
         let path = PathBuf::from("subdir/file.txt");
         let file_contents = "file contents";
 

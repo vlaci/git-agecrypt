@@ -22,21 +22,25 @@ pub struct AppConfig {
     config: HashMap<PathBuf, Vec<String>>,
     #[serde(skip)]
     path: PathBuf,
+    #[serde(skip)]
+    prefix: PathBuf,
 }
 
 impl AppConfig {
-    pub fn load(path: &Path) -> Result<Self> {
+    pub fn load(path: &Path, repo_prefix: &Path) -> Result<Self> {
         match fs::read_to_string(path) {
             Ok(contents) => {
                 let mut cfg: AppConfig = toml::from_str(&contents).with_context(|| {
                     format!("Couldn't load configuration file '{}'", path.display())
                 })?;
                 cfg.path = path.into();
+                cfg.prefix = repo_prefix.into();
                 Ok(cfg)
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Self {
                 config: HashMap::new(),
                 path: path.into(),
+                prefix: repo_prefix.into(),
             }),
             Err(err) => Ok(Err(err).with_context(|| {
                 format!("Couldn't read configuration file '{}'", path.display())
@@ -110,7 +114,12 @@ impl AppConfig {
     pub fn get_public_keys(&self, path: &Path) -> Result<&[String]> {
         let pubk = self
             .config
-            .get(path)
+            .get(path.strip_prefix(&self.prefix).with_context(|| {
+                format!(
+                    "Not a path inside git repository, path={path:?}, repo={:?}",
+                    self.prefix
+                )
+            })?)
             .with_context(|| format!("No public key can be found for '{}'", path.display()))?;
         Ok(&pubk[..])
     }
