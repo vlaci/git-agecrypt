@@ -18,11 +18,11 @@ pub(crate) trait Context {
 
     fn store_sidecar(&self, for_path: &Path, extension: &str, content: &[u8]) -> Result<()>;
 
-    fn load_sidecar<const N: usize>(
+    fn load_sidecar(
         &self,
         for_path: &Path,
         extension: &str,
-    ) -> Result<Option<[u8; N]>>;
+    ) -> Result<Option<Vec<u8>>>;
 
     fn current_exe(&self) -> Result<String>;
 
@@ -70,16 +70,16 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
         Ok(())
     }
 
-    fn load_sidecar<const N: usize>(
+    fn load_sidecar(
         &self,
         for_path: &Path,
         extension: &str,
-    ) -> Result<Option<[u8; N]>> {
+    ) -> Result<Option<Vec<u8>>> {
         let sidecar_path = self.get_sidecar(for_path, extension)?;
         match File::open(&sidecar_path) {
             Ok(mut f) => {
-                let mut buff = [0u8; N];
-                f.read_exact(&mut buff)?;
+                let mut buff = Vec::new();
+                f.read_to_end(&mut buff)?;
                 Ok(Some(buff))
             }
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),

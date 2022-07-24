@@ -19,10 +19,12 @@ impl<C: Context> CommandContext<C> {
         let file = self.ctx.repo().workdir().join(file);
 
         log::debug!("Looking for saved has information. target={:?}", file,);
-        let existing_hash: [u8; 32] = self.ctx.load_sidecar(&file, "hash")?.unwrap_or_else(|| {
+        let mut existing_hash = [0u8; 32];
+        if let Some(hash_buffer) = self.ctx.load_sidecar(&file, "hash")? {
+            existing_hash = hash_buffer.as_slice().try_into()?
+        } else {
             log::debug!("No saved hash file found");
-            Default::default()
-        });
+        }
 
         let mut hasher = blake3::Hasher::new();
         let mut contents = vec![];
@@ -35,9 +37,16 @@ impl<C: Context> CommandContext<C> {
             old_hash.to_hex().as_str(),
             hash.to_hex().as_str()
         );
-        let result = if hash == old_hash {
+
+        let saved = if hash == old_hash {
+            self.ctx.load_sidecar(&file, "age")?
+        } else {
+            None
+        };
+
+        let result = if let Some(content) = saved {
             log::debug!("File didn't change since last encryption, loading from git HEAD");
-            self.ctx.repo().get_file_contents(&file)?
+            content
         } else {
             log::debug!("File changed since last encryption, re-encrypting");
 
@@ -46,6 +55,7 @@ impl<C: Context> CommandContext<C> {
 
             let res = age::encrypt(public_keys, &mut &contents[..])?;
             self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
+            self.ctx.store_sidecar(&file, "age", &res)?;
             res
         };
         Ok(io::stdout().write_all(&result)?)
