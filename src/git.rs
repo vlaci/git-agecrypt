@@ -147,8 +147,8 @@ impl Repository for LibGit2Repository {
     }
 
     fn set_config(&self, key: &str, value: &str) -> Result<()> {
-        if self.get_config(key).is_ok() {
-            return Err(Error::AlreadyExists(key.into()));
+        for v in self.list_config(key)? {
+            self.remove_config(key, &v)?;
         }
         let mut cfg = self.inner.config()?;
         cfg.set_str(key, value)?;
@@ -292,19 +292,20 @@ mod tests {
         git_repo.set_config("foo.bar", "foobar")?;
         git_repo.add_config("foo.bar", "snafu")?;
 
-        // Set won't work with multivalue entries
-        assert_matches!(
-            git_repo.set_config("foo.bar", "FOOBAR"),
-            Err(Error::AlreadyExists(key)) if key == "foo.bar"
-        );
-
         assert!(git_repo.contains_config("foo.bar", "foobar"));
         assert!(git_repo.contains_config("foo.bar", "snafu"));
-
         assert_eq!(git_repo.list_config("foo")?, ["foobar", "snafu"]);
 
         // Returns the last set config
         assert_eq!(git_repo.get_config("foo.bar")?, "snafu");
+
+        // Set overrides multivalue entries
+        git_repo.set_config("foo.bar", "FOOBAR")?;
+
+        assert!(git_repo.contains_config("foo.bar", "FOOBAR"));
+        assert_eq!(git_repo.list_config("foo")?, ["FOOBAR"]);
+
+        git_repo.set_config("foo.bar", "foobar")?;
 
         // Duplicate value cannot be added
         assert_matches!(
