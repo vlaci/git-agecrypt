@@ -48,29 +48,46 @@ impl<C: Context> CommandContext<C> {
             log::debug!("File didn't change since last encryption, loading from git HEAD");
             content
         } else {
-            log::debug!("File changed since last encryption, re-encrypting");
+            log::debug!("Encrypted content changed, checking decrypted version");
+            let repo_contents = self.ctx.repo().get_file_contents(&file)?;
+            let identities = self.get_identities()?;
+            let mut cur = io::Cursor::new(repo_contents);
+            let decrypted = age::decrypt(&identities, &mut cur)?.unwrap_or_default();
+            if decrypted == contents {
+                log::debug!("Decrypted content matches, using from working copy");
+                self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
+                self.ctx.store_sidecar(&file, "age", cur.get_ref())?;
+                cur.into_inner()
+            } else {
+                log::debug!("File changed since last encryption, re-encrypting");
 
-            let cfg = self.ctx.config()?;
-            let public_keys = cfg.get_public_keys(&file)?;
+                let cfg = self.ctx.config()?;
+                let public_keys = cfg.get_public_keys(&file)?;
 
-            let res = age::encrypt(public_keys, &mut &contents[..])?;
-            self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
-            self.ctx.store_sidecar(&file, "age", &res)?;
-            res
+                let res = age::encrypt(public_keys, &mut &contents[..])?;
+                self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
+                self.ctx.store_sidecar(&file, "age", &res)?;
+                res
+            }
         };
         Ok(io::stdout().write_all(&result)?)
     }
 
-    pub(crate) fn smudge(&self, file: impl AsRef<Path>) -> Result<()> {
-        log::info!("Decrypting file");
-        let file = self.ctx.repo().workdir().join(file);
-
+    fn get_identities(&self) -> Result<Vec<String>> {
         log::debug!("Loading identities from config");
         let all_identities = self.ctx.repo().list_config("identity")?;
         log::debug!(
             "Loaded identities from config; identities='{:?}'",
             all_identities
         );
+        Ok(all_identities)
+    }
+
+    pub(crate) fn smudge(&self, file: impl AsRef<Path>) -> Result<()> {
+        log::info!("Decrypting file");
+        let file = self.ctx.repo().workdir().join(file);
+
+        let all_identities = self.get_identities()?;
         if let Some(rv) = age::decrypt(&all_identities, &mut io::stdin())? {
             log::info!("Decrypted file");
             let mut hasher = blake3::Hasher::new();
