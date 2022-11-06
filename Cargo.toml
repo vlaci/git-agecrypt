@@ -1,15 +1,15 @@
 [package]
 name = "git-agecrypt"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-age = { version = "0.7.0", features = [ "cli-common", "armor", "ssh", "plugin" ] }
+age = { version = "0.9.0", features = [ "cli-common", "armor", "ssh", "plugin" ] }
 anyhow = { version = "1.0.52", features = ["backtrace"] }
 blake3 = "1.2.0"
-clap = { version = "3.0.0-rc.8", features = [ "derive" ] }
+clap = { version = "4.0.19", features = [ "derive" ] }
 env_logger = "0.9.0"
 git2 = { version = "0.13.25", default-features = false }
 log = "0.4.14"
@@ -24,4 +24,4 @@ toml = "0.5.8"
 assert_fs = "1.0.6"
 assert_matches = "1.5.0"
 duct = "0.13.5"
-rstest = "0.12.0"
+rstest = "0.15.0"

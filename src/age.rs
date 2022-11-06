@@ -41,12 +41,17 @@ fn load_identities(identities: &[impl AsRef<Path>]) -> Result<Vec<Box<dyn Identi
 }
 
 pub(crate) fn encrypt(
-    public_keys: &[impl AsRef<str>],
+    public_keys: &[impl AsRef<str> + std::fmt::Debug],
     cleartext: &mut impl Read,
 ) -> Result<Vec<u8>> {
     let recipients = load_public_keys(public_keys)?;
 
-    let encryptor = Encryptor::with_recipients(recipients);
+    let encryptor = Encryptor::with_recipients(recipients).with_context(|| {
+        format!(
+            "Couldn't load keys for recepients; public_keys={:?}",
+            public_keys
+        )
+    })?;
     let mut encrypted = vec![];
 
     let mut writer = encryptor.wrap_output(&mut encrypted)?;
@@ -55,8 +60,8 @@ pub(crate) fn encrypt(
     Ok(encrypted)
 }
 
-fn load_public_keys(public_keys: &[impl AsRef<str>]) -> Result<Vec<Box<dyn Recipient>>> {
-    let mut recipients: Vec<Box<dyn Recipient>> = vec![];
+fn load_public_keys(public_keys: &[impl AsRef<str>]) -> Result<Vec<Box<dyn Recipient + Send>>> {
+    let mut recipients: Vec<Box<dyn Recipient + Send>> = vec![];
     let mut plugin_recipients = vec![];
 
     for pubk in public_keys {

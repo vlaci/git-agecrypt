@@ -1,13 +1,10 @@
 use std::path::PathBuf;
 
-use clap::{AppSettings, ArgGroup, Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand};
 
 /// Transparently encrypt/decrypt age secrets
 #[derive(Parser)]
 #[clap(author, version, about)]
-#[clap(global_setting(AppSettings::UseLongFormatForHelpSubcommand))]
-#[clap(global_setting(AppSettings::DeriveDisplayOrder))]
-#[clap(setting(AppSettings::SubcommandRequiredElseHelp))]
 pub struct Args {
     #[clap(subcommand)]
     pub command: Commands,
@@ -19,9 +16,9 @@ pub struct Args {
     clean, smudge, textconv"
 )]
 pub enum Commands {
-    #[clap(flatten)]
+    #[command(flatten)]
     Public(PublicCommands),
-    #[clap(flatten)]
+    #[command(flatten)]
     Internal(InternalCommands),
 }
 
@@ -34,7 +31,7 @@ pub enum PublicCommands {
     Status,
 
     /// Configure encryption settings
-    #[clap(subcommand)]
+    #[command(subcommand)]
     Config(ConfigCommands),
 
     /// Remove repository specific configuration
@@ -66,15 +63,15 @@ pub enum ConfigCommands {
 ))]
 pub struct AddConfig {
     /// Identity usable for decryption
-    #[clap(short, long, multiple_values = true, group = "config")]
+    #[arg(short, long, num_args = 1.., group = "config")]
     identity: Option<PathBuf>,
 
     /// Recipient for encryption
-    #[clap(short, long, multiple_values = true, group = "config")]
+    #[arg(short, long, num_args = 1.., group = "config")]
     recipient: Option<Vec<String>>,
 
     /// Path to encrypt for the given recipient
-    #[clap(short, long, multiple_values = true)]
+    #[arg(short, long, num_args = 1..)]
     path: Option<Vec<PathBuf>>,
 }
 
@@ -136,11 +133,11 @@ impl From<RemoveConfig> for ModifyConfig {
 ))]
 pub struct ConfigType {
     /// Identity usable for decryption
-    #[clap(short, long)]
+    #[arg(short, long)]
     identity: bool,
 
     /// Recipient for encryption
-    #[clap(short, long)]
+    #[arg(short, long)]
     recipient: bool,
 }
 
@@ -164,7 +161,7 @@ impl From<ConfigType> for QueryConfig {
 #[derive(Subcommand)]
 pub enum InternalCommands {
     /// Encrypt files for commit
-    #[clap(setting(AppSettings::Hidden))]
+    #[command(hide = true)]
     Clean {
         /// File to clean
         #[clap(short, long)]
@@ -172,7 +169,7 @@ pub enum InternalCommands {
     },
 
     /// Decrypt files from checkout
-    #[clap(setting(AppSettings::Hidden))]
+    #[command(hide = true)]
     Smudge {
         /// File to smudge
         #[clap(short, long)]
@@ -180,7 +177,7 @@ pub enum InternalCommands {
     },
 
     // Decrypt files for diff
-    #[clap(setting(AppSettings::Hidden))]
+    #[command(hide = true)]
     Textconv {
         /// File to show
         path: PathBuf,
