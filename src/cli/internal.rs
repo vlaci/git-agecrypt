@@ -61,26 +61,16 @@ impl<C: Context> CommandContext<C> {
         Ok(io::stdout().write_all(&result)?)
     }
 
-    pub(crate) fn smudge(
-        &self,
-        identities: &[impl AsRef<Path>],
-        file: impl AsRef<Path>,
-    ) -> Result<()> {
+    pub(crate) fn smudge(&self, file: impl AsRef<Path>) -> Result<()> {
         log::info!("Decrypting file");
         let file = self.ctx.repo().workdir().join(file);
 
         log::debug!("Loading identities from config");
-        let mut all_identities = self.ctx.repo().list_config("identity")?;
+        let all_identities = self.ctx.repo().list_config("identity")?;
         log::debug!(
             "Loaded identities from config; identities='{:?}'",
             all_identities
         );
-        all_identities.extend(
-            identities
-                .iter()
-                .map(|i| i.as_ref().to_string_lossy().into()),
-        );
-
         if let Some(rv) = age::decrypt(&all_identities, &mut io::stdin())? {
             log::info!("Decrypted file");
             let mut hasher = blake3::Hasher::new();
@@ -95,26 +85,16 @@ impl<C: Context> CommandContext<C> {
         }
     }
 
-    pub(crate) fn textconv(
-        &self,
-        identities: &[impl AsRef<Path>],
-        path: impl AsRef<Path>,
-    ) -> Result<()> {
+    pub(crate) fn textconv(&self, path: impl AsRef<Path>) -> Result<()> {
         log::info!("Decrypting file to show in diff");
 
-        let mut all_identities: Vec<String> = self
+        let all_identities: Vec<String> = self
             .ctx
             .age_identities()
             .list()?
             .into_iter()
             .map(|i| i.path)
             .collect();
-
-        all_identities.extend(
-            identities
-                .iter()
-                .map(|i| i.as_ref().to_string_lossy().into()),
-        );
 
         let mut f = File::open(path)?;
         let result = if let Some(rv) = age::decrypt(&all_identities, &mut f)? {

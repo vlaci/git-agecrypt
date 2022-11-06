@@ -17,8 +17,8 @@ fn run_internal_command(commands: InternalCommands, ctx: impl Context) -> Result
     let cmd = internal::CommandContext { ctx };
     match commands {
         InternalCommands::Clean { file } => cmd.clean(&file),
-        InternalCommands::Smudge { identities, file } => cmd.smudge(&identities, &file),
-        InternalCommands::Textconv { identities, path } => cmd.textconv(&identities, &path),
+        InternalCommands::Smudge { file } => cmd.smudge(&file),
+        InternalCommands::Textconv { path } => cmd.textconv(&path),
     }
 }
 

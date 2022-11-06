@@ -174,9 +174,6 @@ pub enum InternalCommands {
     /// Decrypt files from checkout
     #[clap(setting(AppSettings::Hidden))]
     Smudge {
-        #[clap(short, long)]
-        identities: Vec<String>,
-
         /// File to smudge
         #[clap(short, long)]
         file: PathBuf,
@@ -185,10 +182,6 @@ pub enum InternalCommands {
     // Decrypt files for diff
     #[clap(setting(AppSettings::Hidden))]
     Textconv {
-        /// Additional identities to use
-        #[clap(short, long)]
-        identities: Vec<String>,
-
         /// File to show
         path: PathBuf,
     },
