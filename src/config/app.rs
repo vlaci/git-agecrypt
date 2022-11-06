@@ -11,7 +11,7 @@ use crate::age;
 
 use super::Result;
 
-#[derive(Serialize, Deserialize, PartialEq)]
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
 pub struct RecipientEntry {
     paths: Vec<PathBuf>,
     recipients: Vec<String>,
