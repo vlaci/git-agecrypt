@@ -87,14 +87,18 @@ impl<C: Context> CommandContext<C> {
         log::info!("Decrypting file");
         let file = self.ctx.repo().workdir().join(file);
 
+        let mut encrypted = vec![];
+        io::stdin().read_to_end(&mut encrypted)?;
+        let mut cur = io::Cursor::new(encrypted);
         let all_identities = self.get_identities()?;
-        if let Some(rv) = age::decrypt(&all_identities, &mut io::stdin())? {
+        if let Some(rv) = age::decrypt(&all_identities, &mut cur)? {
             log::info!("Decrypted file");
             let mut hasher = blake3::Hasher::new();
             let hash = hasher.update(&rv).finalize();
 
             log::debug!("Storing hash for file; hash={:?}", hash.to_hex().as_str(),);
             self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
+            self.ctx.store_sidecar(&file, "age", cur.get_ref())?;
 
             Ok(io::stdout().write_all(&rv)?)
         } else {
