@@ -132,10 +132,13 @@ impl Repository for LibGit2Repository {
 
     fn list_config(&self, key: &str) -> Result<Vec<String>> {
         let cfg = self.inner.config()?;
-        let entries = cfg
-            .entries(Some(key))?
-            .filter_map(|e| e.ok().and_then(|e| e.value().map(|e| e.to_owned())))
-            .collect();
+        let mut entries = Vec::new();
+
+        cfg.entries(Some(key))?.for_each(|e| {
+            if let Some(v) = e.value() {
+                entries.push(v.into())
+            }
+        })?;
 
         Ok(entries)
     }

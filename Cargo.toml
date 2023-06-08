@@ -8,15 +8,15 @@ edition = "2021"
 [dependencies]
 age = { version = "0.9.0", features = [ "cli-common", "armor", "ssh", "plugin" ] }
 anyhow = { version = "1.0.52", features = ["backtrace"] }
-blake3 = "1.2.0"
-clap = { version = "4.0.19", features = [ "derive" ] }
-env_logger = "0.9.0"
-git2 = { version = "0.13.25", default-features = false }
+blake3 = "1.3.3"
+clap = { version = "4.3.2", features = [ "derive" ] }
+env_logger = "0.10.0"
+git2 = { version = "0.17.2", default-features = false }
 log = "0.4.14"
-regex = "1.5.4"
+regex = "1.8.4"
 serde = { version = "1.0.133", features = [ "derive" ] }
 thiserror = "1.0.30"
-toml = "0.5.8"
+toml = "0.7.4"
 
 [features]
 
@@ -24,4 +24,4 @@ toml = "0.5.8"
 assert_fs = "1.0.6"
 assert_matches = "1.5.0"
 duct = "0.13.5"
-rstest = "0.15.0"
+rstest = "0.17.0"
