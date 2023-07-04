@@ -4,8 +4,8 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, ... }@inputs:
-    rec {
+  outputs = { self, nixpkgs, flake-utils, ... }:
+    {
       overlay = final: prev: {
         git-agecrypt = final.callPackage ./default.nix {};
       };
@@ -18,7 +18,7 @@
         };
       in
       {
-        defaultPackage = pkgs.git-agecrypt;
-        devShell = import ./shell.nix { inherit pkgs; };
+        packages.default = pkgs.git-agecrypt;
+        devShells.default = import ./shell.nix { inherit pkgs; };
       });
 }
