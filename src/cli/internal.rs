@@ -1,13 +1,13 @@
 use std::{
     fs::File,
     io::{self, Read, Seek, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{bail, Result};
 use blake3::Hash;
 
-use crate::{age, ctx::Context, git::Repository};
+use crate::{age, ctx::Context, git::Error as GitError, git::Repository};
 
 pub(crate) struct CommandContext<C: Context> {
     pub ctx: C,
@@ -44,12 +44,33 @@ impl<C: Context> CommandContext<C> {
             None
         };
 
-        let result = if let Some(content) = saved {
+        let result = self.get_content(contents, hash, file, saved)?;
+        Ok(io::stdout().write_all(&result)?)
+    }
+
+    fn get_content(
+        &self,
+        contents: Vec<u8>,
+        hash: Hash,
+        file: PathBuf,
+        saved_content: Option<Vec<u8>>,
+    ) -> Result<Vec<u8>> {
+        if let Some(saved_content) = saved_content {
             log::debug!("File didn't change since last encryption, loading from git HEAD");
-            content
-        } else {
-            log::debug!("Encrypted content changed, checking decrypted version");
-            let repo_contents = self.ctx.repo().get_file_contents(&file)?;
+            return Ok(saved_content);
+        }
+
+        log::debug!("Encrypted content changed, checking decrypted version");
+        let repo_contents = match self.ctx.repo().get_file_contents(&file) {
+            Ok(v) => Some(v),
+            Err(GitError::NotExist(s)) => {
+                log::debug!("{}", s);
+                None
+            }
+            Err(e) => return Err(e.into()),
+        };
+
+        if let Some(repo_contents) = repo_contents {
             let identities = self.get_identities()?;
             let mut cur = io::Cursor::new(repo_contents);
             let decrypted = age::decrypt(&identities, &mut cur)?.unwrap_or_default();
@@ -57,20 +78,19 @@ impl<C: Context> CommandContext<C> {
                 log::debug!("Decrypted content matches, using from working copy");
                 self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
                 self.ctx.store_sidecar(&file, "age", cur.get_ref())?;
-                cur.into_inner()
-            } else {
-                log::debug!("File changed since last encryption, re-encrypting");
-
-                let cfg = self.ctx.config()?;
-                let public_keys = cfg.get_public_keys(&file)?;
-
-                let res = age::encrypt(public_keys, &mut &contents[..])?;
-                self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
-                self.ctx.store_sidecar(&file, "age", &res)?;
-                res
+                return Ok(cur.into_inner());
             }
-        };
-        Ok(io::stdout().write_all(&result)?)
+        }
+
+        log::debug!("File changed since last encryption, re-encrypting");
+
+        let cfg = self.ctx.config()?;
+        let public_keys = cfg.get_public_keys(&file)?;
+
+        let res = age::encrypt(public_keys, &mut &contents[..])?;
+        self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
+        self.ctx.store_sidecar(&file, "age", &res)?;
+        Ok(res)
     }
 
     fn get_identities(&self) -> Result<Vec<String>> {
