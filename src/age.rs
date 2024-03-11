@@ -1,5 +1,5 @@
 use std::{
-    io::{self, Read},
+    io::{self, Read, ErrorKind as IoErrorKind},
     path::Path,
 };
 
@@ -22,7 +22,17 @@ pub(crate) fn decrypt(
         Ok(Decryptor::Recipients(d)) => d,
         Ok(Decryptor::Passphrase(_)) => bail!("Passphrase encrypted files are not supported"),
         Err(DecryptError::InvalidHeader) => return Ok(None),
-        Err(e) => bail!(e),
+        Err(DecryptError::Io(e)) => {
+            match e.kind() {
+                // Age gives unexpected EOF when the file contains not enough data
+                IoErrorKind::UnexpectedEof => return Ok(None),
+                _ => bail!(e),
+            }
+        }
+        Err(e) => {
+            println!("Error: {:?}", e);
+            bail!(e)
+        }
     };
 
     let mut reader = decryptor.decrypt(id)?;
