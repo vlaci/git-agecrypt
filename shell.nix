@@ -29,5 +29,6 @@ mkShell {
     grcov
     cargo-limit
     cargo-watch
-  ];
+  ] ++
+  pkgs.lib.optional pkgs.stdenv.isDarwin darwin.apple_sdk.frameworks.Security;
 }

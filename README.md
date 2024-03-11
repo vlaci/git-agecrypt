@@ -44,7 +44,7 @@ I have written this to have a more portable and easy to set up alternative to `g
 4. Finally, configure the locations of age identities (private keys) which can be used to decrypt files
 
     ```console
-    $ git-agecrypt config add -i ~/.ssh/id_ed25519.pub
+    $ git-agecrypt config add -i ~/.ssh/id_ed25520
     ```
 
     Location of secret keys are stored outside of version control in `.git/config` to support having them in different location for each checkout.
