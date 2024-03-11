@@ -76,7 +76,7 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
         extension: &str,
     ) -> Result<Option<Vec<u8>>> {
         let sidecar_path = self.get_sidecar(for_path, extension)?;
-        match File::open(&sidecar_path) {
+        match File::open(sidecar_path) {
             Ok(mut f) => {
                 let mut buff = Vec::new();
                 f.read_to_end(&mut buff)?;

@@ -16,9 +16,9 @@ pub(crate) fn run(args: Args, ctx: impl Context) -> Result<()> {
 fn run_internal_command(commands: InternalCommands, ctx: impl Context) -> Result<()> {
     let cmd = internal::CommandContext { ctx };
     match commands {
-        InternalCommands::Clean { file } => cmd.clean(&file),
-        InternalCommands::Smudge { file } => cmd.smudge(&file),
-        InternalCommands::Textconv { path } => cmd.textconv(&path),
+        InternalCommands::Clean { file } => cmd.clean(file),
+        InternalCommands::Smudge { file } => cmd.smudge(file),
+        InternalCommands::Textconv { path } => cmd.textconv(path),
     }
 }
 
