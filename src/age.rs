@@ -5,7 +5,7 @@ use std::{
 
 use age::{
     armor::ArmoredReader,
-    cli_common::{read_identities, UiCallbacks},
+    cli_common::{read_identities, StdinGuard, UiCallbacks},
     plugin::{self, RecipientPluginV1},
     DecryptError, Decryptor, Encryptor, Identity, Recipient,
 };
@@ -45,7 +45,8 @@ fn load_identities(identities: &[impl AsRef<Path>]) -> Result<Vec<Box<dyn Identi
         .iter()
         .map(|i| i.as_ref().to_string_lossy().into())
         .collect();
-    let rv = read_identities(id.clone(), None)
+    let mut stdin_guard = StdinGuard::new(false);
+    let rv = read_identities(id.clone(), None, &mut stdin_guard)
         .with_context(|| format!("Loading identities failed from paths: {:?}", id))?;
     Ok(rv)
 }
@@ -101,6 +102,7 @@ pub(crate) fn validate_public_keys(public_keys: &[impl AsRef<str>]) -> Result<()
 }
 
 pub(crate) fn validate_identity(identity: impl AsRef<Path>) -> Result<()> {
-    read_identities(vec![identity.as_ref().to_string_lossy().into()], None)?;
+    let mut stdin_guard = StdinGuard::new(false);
+    read_identities(vec![identity.as_ref().to_string_lossy().into()], None, &mut stdin_guard)?;
     Ok(())
 }
