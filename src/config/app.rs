@@ -65,7 +65,7 @@ impl AppConfig {
             .collect();
         if !invalid_paths.is_empty() {
             return Err(anyhow!(
-                "The follwing files doesn't exist: {}",
+                "The following files doesn't exist: {}",
                 invalid_paths.join(", ")
             )
             .into());
