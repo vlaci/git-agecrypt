@@ -49,6 +49,12 @@ I have written this to have a more portable and easy to set up alternative to `g
 
     Location of secret keys are stored outside of version control in `.git/config` to support having them in different location for each checkout.
 
+5. Changing recipients: edit the rules with `git-agecrypt config add`/`remove`, then run `git add --renormalize .` and commit.
+
+    If the cache was lost, or the repository was cloned with globally configured filters, run `git-agecrypt rekey` instead to force re-encryption of the affected files.
+
+    Old blobs in history stay readable by removed recipients; rotate the secret itself to revoke access.
+
 ## Behind the scenes
 
 This application hooks into git using [`smudge` `clean` and `textconv` filters](https://git-scm.com/book/en/v2/Customizing-Git-Git-Attributes). Issuing `git-agecrypt init` adds them to the repository local `.git/config`:
@@ -62,7 +68,7 @@ This application hooks into git using [`smudge` `clean` and `textconv` filters](
         textconv = /path/to/git-agecrypt textconv
 ```
 
-These filters are assigned to repository files in `.gitattributes`. When configured, they are being called for each file when touching the index. Encryption is non-deterministic, so each time `git status`, `git add`, etc is run a new ciphertext would be generated. To circumvent this, a [blake3](https://github.com/BLAKE3-team/BLAKE3) hash is calculated for the plaintext and stored under `.git/git-agecrypt/` directory. While the hashes stored match with the file contents in the working tree, `git-agencrypt` loads the previous ciphertext from the index when git asks for it.
+These filters are assigned to repository files in `.gitattributes`. When configured, they are being called for each file when touching the index. Encryption is non-deterministic, so each time `git status`, `git add`, etc is run a new ciphertext would be generated. To circumvent this, a [blake3](https://github.com/BLAKE3-team/BLAKE3) hash is calculated for the plaintext and stored under `.git/git-agecrypt/v2/` directory, together with a fingerprint of the configured recipients. The ciphertext is reused only while both match. After editing recipients with `git-agecrypt config`, run `git add --renormalize .` and commit.
 
 Encryption can work without access to private keys (what Age calls identities). In order to pull remote changes of encrypted files or to see plain diff of files, these have to be configured with `git-agecrypt config`. They are stored in `.git/config` conforming to standard git config format:
 

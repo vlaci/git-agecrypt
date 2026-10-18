@@ -1,11 +1,10 @@
 use std::{
     fs::File,
     io::{self, Read, Seek, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use anyhow::{bail, Result};
-use blake3::Hash;
 
 use crate::{
     age,
@@ -28,73 +27,85 @@ impl<C: Context> CommandContext<C> {
         let mut contents = vec![];
         io::stdin().read_to_end(&mut contents)?;
         let hash = hasher.update(&contents).finalize();
+        let h = *hash.as_bytes();
 
-        let saved = self
-            .ctx
-            .load_cache(&file)?
-            .filter(|e| e.plaintext_hash == *hash.as_bytes())
-            .map(|e| e.ciphertext);
+        let cfg = self.ctx.config()?;
+        let recipients = cfg.get_public_keys(&file)?;
+        let fp = cache::recipients_fingerprint(recipients);
 
-        let result = self.get_content(contents, hash, file, saved)?;
-        Ok(io::stdout().write_all(&result)?)
-    }
+        let entry = self.ctx.load_cache(&file)?;
 
-    fn get_content(
-        &self,
-        contents: Vec<u8>,
-        hash: Hash,
-        file: PathBuf,
-        saved_content: Option<Vec<u8>>,
-    ) -> Result<Vec<u8>> {
-        if let Some(saved_content) = saved_content {
-            log::debug!("File didn't change since last encryption, loading from cache");
-            return Ok(saved_content);
+        if let Some(ref e) = entry {
+            if e.plaintext_hash == h
+                && (e.recipients == fp || e.recipients == cache::UNKNOWN_RECIPIENTS)
+            {
+                // Upgrade UNKNOWN_RECIPIENTS to the actual fingerprint
+                if e.recipients == cache::UNKNOWN_RECIPIENTS {
+                    self.ctx.store_cache(
+                        &file,
+                        &CacheEntry {
+                            plaintext_hash: h,
+                            recipients: fp,
+                            ciphertext: e.ciphertext.clone(),
+                        },
+                    )?;
+                }
+                return Ok(io::stdout().write_all(&e.ciphertext)?);
+            }
         }
 
-        log::debug!("Encrypted content changed, checking decrypted version");
-        let repo_contents = match self.ctx.repo().get_file_contents(&file) {
-            Ok(v) => Some(v),
-            Err(GitError::NotExist(s)) => {
-                log::debug!("{}", s);
-                None
-            }
-            Err(e) => return Err(e.into()),
-        };
+        let head_reuse_allowed = entry
+            .as_ref()
+            .is_none_or(|e| e.recipients == fp || e.recipients == cache::UNKNOWN_RECIPIENTS);
 
-        if let Some(repo_contents) = repo_contents {
-            let identities = self.get_identities()?;
-            let mut cur = io::Cursor::new(repo_contents);
-            let decrypted = age::decrypt(&identities, &mut cur)?.unwrap_or_default();
-            if decrypted == contents {
-                log::debug!("Decrypted content matches, using from working copy");
-                let ciphertext = cur.into_inner();
+        if head_reuse_allowed {
+            if let Some(repo_contents) = self.try_head_reuse(&file, &contents)? {
+                let ciphertext = repo_contents;
                 self.ctx.store_cache(
                     &file,
                     &CacheEntry {
-                        plaintext_hash: *hash.as_bytes(),
-                        recipients: cache::UNKNOWN_RECIPIENTS,
+                        plaintext_hash: h,
+                        recipients: fp,
                         ciphertext: ciphertext.clone(),
                     },
                 )?;
-                return Ok(ciphertext);
+                return Ok(io::stdout().write_all(&ciphertext)?);
             }
         }
 
         log::debug!("File changed since last encryption, re-encrypting");
-
-        let cfg = self.ctx.config()?;
-        let public_keys = cfg.get_public_keys(&file)?;
-
-        let res = age::encrypt(public_keys, &mut &contents[..])?;
+        let res = age::encrypt(recipients, &mut &contents[..])?;
         self.ctx.store_cache(
             &file,
             &CacheEntry {
-                plaintext_hash: *hash.as_bytes(),
-                recipients: cache::UNKNOWN_RECIPIENTS,
+                plaintext_hash: h,
+                recipients: fp,
                 ciphertext: res.clone(),
             },
         )?;
-        Ok(res)
+        Ok(io::stdout().write_all(&res)?)
+    }
+
+    fn try_head_reuse(&self, file: &Path, contents: &[u8]) -> Result<Option<Vec<u8>>> {
+        log::debug!("Encrypted content changed, checking decrypted version");
+        let repo_contents = match self.ctx.repo().get_file_contents(file) {
+            Ok(v) => v,
+            Err(GitError::NotExist(s)) => {
+                log::debug!("{s}");
+                return Ok(None);
+            }
+            Err(e) => return Err(e.into()),
+        };
+
+        let identities = self.get_identities()?;
+        let mut cur = io::Cursor::new(repo_contents);
+        let decrypted = age::decrypt(&identities, &mut cur)?.unwrap_or_default();
+        if decrypted == contents {
+            log::debug!("Decrypted content matches, using from working copy");
+            Ok(Some(cur.into_inner()))
+        } else {
+            Ok(None)
+        }
     }
 
     fn get_identities(&self) -> Result<Vec<String>> {
@@ -126,12 +137,20 @@ impl<C: Context> CommandContext<C> {
             let mut hasher = blake3::Hasher::new();
             let hash = hasher.update(&rv).finalize();
 
+            let fp = self
+                .ctx
+                .config()
+                .ok()
+                .and_then(|c| c.get_public_keys(&file).ok().map(|keys| keys.to_vec()))
+                .map(|keys| cache::recipients_fingerprint(&keys))
+                .unwrap_or(cache::UNKNOWN_RECIPIENTS);
+
             log::debug!("Storing hash for file; hash={:?}", hash.to_hex().as_str());
             self.ctx.store_cache(
                 &file,
                 &CacheEntry {
                     plaintext_hash: *hash.as_bytes(),
-                    recipients: cache::UNKNOWN_RECIPIENTS,
+                    recipients: fp,
                     ciphertext: cur.into_inner(),
                 },
             )?;

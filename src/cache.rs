@@ -46,7 +46,6 @@ impl CacheEntry {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn recipients_fingerprint(recipients: &[String]) -> [u8; 32] {
     let mut v: Vec<&str> = recipients
         .iter()

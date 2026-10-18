@@ -4,6 +4,7 @@ use std::{
     ffi::OsStr,
     fs,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 use snapbox::cmd::{Command, OutputAssert};
@@ -13,7 +14,7 @@ use age::secrecy::ExposeSecret;
 const BIN: &str = env!("CARGO_BIN_EXE_git-agecrypt");
 
 struct Sandbox {
-    tmp: assert_fs::TempDir,
+    tmp: Rc<assert_fs::TempDir>,
     home: PathBuf,
     repo: PathBuf,
 }
@@ -42,10 +43,24 @@ impl Sandbox {
             "[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n",
         )
         .unwrap();
-        let sb = Self { tmp, home, repo };
+        let sb = Self {
+            tmp: tmp.into(),
+            home,
+            repo,
+        };
         sb.assert_run_git(["init"]);
         sb.run_agecrypt().arg("init").assert().success();
         sb
+    }
+
+    fn git_clone(&self, dir: &str) -> Self {
+        let repo = &self.tmp.path().join(dir);
+        self.assert_run_git(["clone", "--no-checkout", ".", repo.to_str().unwrap()]);
+        Self {
+            tmp: self.tmp.clone(),
+            home: self.home.clone(),
+            repo: repo.into(),
+        }
     }
 
     fn command(&self, program: impl AsRef<OsStr>, dir: &Path) -> Command {
@@ -119,6 +134,15 @@ impl Sandbox {
     fn add_recipient(&self, key: &Key, paths: &[&str]) {
         let mut args = vec!["config", "add", "-r", &key.recipient, "-p"];
         args.extend_from_slice(paths);
+        self.run_agecrypt().args(args).assert().success();
+    }
+
+    fn remove_recipient(&self, key: &Key, paths: &[&str]) {
+        let mut args = vec!["config", "remove", "-r", &key.recipient];
+        if !paths.is_empty() {
+            args.push("-p");
+            args.extend_from_slice(paths);
+        }
         self.run_agecrypt().args(args).assert().success();
     }
 
@@ -231,4 +255,44 @@ fn same_stem_and_same_directory_files_keep_their_own_recipients() {
 
     sb.assert_encrypted_to("HEAD:a.yaml", &key2, &key1);
     sb.assert_encrypted_to("HEAD:conf.d/two", &key2, &key1);
+}
+
+#[test]
+fn recipient_change_takes_effect_on_renormalize() {
+    let sb = Sandbox::new();
+    let key1 = sb.key("k1");
+    let key2 = sb.key("k2");
+
+    sb.add_identity(&key1);
+    sb.add_identity(&key2);
+
+    sb.commit_secret(&key1);
+
+    sb.add_recipient(&key2, &["secret"]);
+    sb.remove_recipient(&key1, &["secret"]);
+
+    sb.assert_run_git(["add", "--renormalize", "."]);
+    sb.assert_run_git(["commit", "-m", "rotate recipient"]);
+
+    sb.assert_encrypted_to("HEAD:secret", &key2, &key1);
+}
+
+#[test]
+fn fresh_clone_renormalize_produces_no_changes() {
+    let sb = Sandbox::new();
+    let key = sb.key("k1");
+    sb.add_identity(&key);
+    sb.commit_secret(&key);
+
+    let clone = sb.git_clone("clone");
+
+    clone.run_agecrypt().arg("init").assert().success();
+    clone.add_identity(&key);
+    clone.assert_run_git(["reset", "--hard", "HEAD"]);
+
+    clone.assert_run_git(["add", "--renormalize", "."]);
+    clone.assert_run_git(["diff", "--cached", "--quiet"]);
+    clone
+        .assert_run_git(["status", "--porcelain"])
+        .stdout_eq("");
 }
