@@ -161,3 +161,12 @@ fn round_trip_encrypts_in_history_and_decrypts_on_checkout() {
     sb.assert_run_git(["checkout", "--", "secret"]);
     sb.assert_decrypted_secret();
 }
+
+#[test]
+fn first_add_on_unborn_branch_succeeds() {
+    let sb = Sandbox::unborn();
+    let key = sb.key("k1");
+    sb.commit_secret(&key);
+
+    assert!(sb.blob("HEAD:secret").starts_with(b"age-encryption.org/v1"));
+}

@@ -87,10 +87,25 @@ impl Repository for LibGit2Repository {
                 self.workdir().display()
             )
         })?;
-        let entry = self
-            .inner
-            .head()
-            .context("Couldn not determine repository head")?
+        let head = match self.inner.head() {
+            Ok(head) => head,
+            Err(e)
+                if matches!(
+                    e.code(),
+                    git2::ErrorCode::UnbornBranch | git2::ErrorCode::NotFound
+                ) =>
+            {
+                return Err(Error::NotExist(
+                    "HEAD does not point to a commit yet".into(),
+                ))
+            }
+            Err(e) => {
+                return Err(Error::Other(
+                    anyhow!(e).context("Could not determine repository head"),
+                ))
+            }
+        };
+        let entry = head
             .peel_to_tree()?
             .get_path(relpath)
             .map_err(|e| match e.code() {
@@ -100,8 +115,11 @@ impl Repository for LibGit2Repository {
                 _ => Error::Other(e.into()),
             })?;
         let contents = entry.to_object(&self.inner)?;
+        let blob = contents.as_blob().ok_or_else(|| {
+            Error::NotExist(format!("Path {} is not a file in HEAD", relpath.display()))
+        })?;
 
-        Ok(contents.as_blob().unwrap().content().into())
+        Ok(blob.content().into())
     }
 
     fn add_config(&self, key: &str, value: &str) -> Result<()> {
@@ -277,6 +295,15 @@ mod tests {
             .get_file_contents(git_repo.dir.path().parent().unwrap())
             .is_err());
 
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_get_file_contents_on_unborn_head(git_repo: Repo) -> Result<()> {
+        assert_matches!(
+            git_repo.get_file_contents(&git_repo.dir.join("x")),
+            Err(Error::NotExist(_))
+        );
         Ok(())
     }
 
