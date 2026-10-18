@@ -32,7 +32,7 @@ impl<C: Context> CommandContext<C> {
 
     pub(crate) fn deinit(&self) -> Result<()> {
         let repo = self.ctx.repo();
-        ensure_state(repo.remove_config_section("fiter.git-agecrypt"))?;
+        ensure_state(repo.remove_config_section("filter.git-agecrypt"))?;
         ensure_state(repo.remove_config_section("diff.git-agecrypt"))?;
 
         self.ctx.remove_sidecar_files()?;
