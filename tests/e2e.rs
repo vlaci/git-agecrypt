@@ -64,13 +64,18 @@ impl Sandbox {
     }
 
     fn command(&self, program: impl AsRef<OsStr>, dir: &Path) -> Command {
-        Command::new(program)
+        let cmd = Command::new(program)
             .env_clear()
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
             .env("HOME", &self.home)
             .env("XDG_CONFIG_HOME", self.home.join(".config"))
             .env("GIT_CONFIG_NOSYSTEM", "1")
-            .current_dir(dir)
+            .current_dir(dir);
+
+        match std::env::var_os("LLVM_PROFILE_FILE") {
+            Some(file) => cmd.env("LLVM_PROFILE_FILE", file),
+            None => cmd,
+        }
     }
 
     fn assert_run_git(&self, args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> OutputAssert {
