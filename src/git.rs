@@ -358,26 +358,60 @@ impl Repository for LibGit2Repository {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
+    use std::{ffi::OsStr, fs, ops::Deref};
 
     use anyhow::Result;
     use assert_fs::prelude::*;
-    use assert_fs::TempDir;
+    use assert_fs::{fixture::ChildPath, TempDir};
     use assert_matches::assert_matches;
-    use duct::cmd;
     use rstest::fixture;
     use rstest::rstest;
 
     use super::*;
 
+    struct Sandbox {
+        _tmp: TempDir,
+        home: PathBuf,
+        work: PathBuf,
+    }
+
+    impl Sandbox {
+        fn git(&self, args: impl IntoIterator<Item = impl AsRef<OsStr>>) {
+            snapbox::cmd::Command::new("git")
+                .env_clear()
+                .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+                .env("HOME", &self.home)
+                .env("XDG_CONFIG_HOME", self.home.join(".config"))
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .current_dir(&self.work)
+                .args(args)
+                .assert()
+                .success();
+        }
+    }
+
     #[fixture]
-    fn tempdir() -> TempDir {
-        TempDir::new().unwrap()
+    fn sandbox() -> Sandbox {
+        let tmp = TempDir::new().unwrap();
+        let home = tmp.path().join("home");
+        let work = tmp.path().join("work");
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(&work).unwrap();
+        fs::write(
+            home.join(".gitconfig"),
+            "[user]\n\tname = A U Thor\n\temail = author@example.com\n[init]\n\tdefaultBranch = main\n",
+        )
+        .unwrap();
+        Sandbox {
+            _tmp: tmp,
+            home,
+            work,
+        }
     }
 
     struct Repo {
         inner: LibGit2Repository,
-        dir: TempDir,
+        sb: Sandbox,
     }
 
     impl Deref for Repo {
@@ -389,69 +423,57 @@ mod tests {
     }
 
     #[fixture]
-    fn git_repo(tempdir: TempDir) -> Repo {
-        cmd!("git", "init").dir(tempdir.path()).run().unwrap();
-        let repo = LibGit2Repository::from_dir(tempdir.path().to_path_buf()).unwrap();
-        Repo {
-            inner: repo,
-            dir: tempdir,
-        }
+    fn git_repo(sandbox: Sandbox) -> Repo {
+        sandbox.git(["init"]);
+        let inner = LibGit2Repository::from_dir(sandbox.work.clone()).unwrap();
+        Repo { inner, sb: sandbox }
     }
 
     #[rstest]
     fn test_repo_can_be_loaded(git_repo: Repo) -> Result<()> {
-        assert_eq!(git_repo.workdir(), git_repo.dir.path());
-        assert_eq!(git_repo.path(), git_repo.dir.join(".git"));
+        assert_eq!(git_repo.workdir(), git_repo.sb.work);
+        assert_eq!(git_repo.path(), git_repo.sb.work.join(".git"));
         Ok(())
     }
 
     #[rstest]
-    fn test_repo_required(tempdir: TempDir) -> Result<()> {
-        let repo = LibGit2Repository::from_dir(tempdir.path().to_path_buf()).err();
+    fn test_repo_required(sandbox: Sandbox) -> Result<()> {
+        let repo = LibGit2Repository::from_dir(sandbox.work.clone()).err();
         assert_matches!(repo, Some(Error::Other(_)));
         Ok(())
     }
 
     #[rstest]
-    fn test_bare_repo_is_error(tempdir: TempDir) -> Result<()> {
-        cmd!("git", "init", "--bare").dir(tempdir.path()).run()?;
-        let repo = LibGit2Repository::from_dir(tempdir.path().to_path_buf()).err();
+    fn test_bare_repo_is_error(sandbox: Sandbox) -> Result<()> {
+        sandbox.git(["init", "--bare"]);
+        let repo = LibGit2Repository::from_dir(sandbox.work.clone()).err();
         assert_matches!(repo, Some(Error::Other(_)));
         Ok(())
     }
 
     #[rstest]
     fn test_get_file_contents(git_repo: Repo) -> Result<()> {
-        cmd!("git", "config", "user.email", "author@example.com")
-            .dir(git_repo.dir.path())
-            .run()?;
-        cmd!("git", "config", "user.name", "A U Thor")
-            .dir(git_repo.dir.path())
-            .run()?;
-        let path = PathBuf::from("subdir/file.txt");
+        let path = "subdir/file.txt";
         let file_contents = "file contents";
 
-        let repo_file = git_repo.dir.child(&path);
-        repo_file.touch()?;
+        let repo_file = ChildPath::new(git_repo.sb.work.join(path));
         repo_file.write_str(file_contents)?;
-        cmd!("git", "add", &path).dir(git_repo.dir.path()).run()?;
-        cmd!("git", "commit", "-m", "adding file")
-            .dir(git_repo.dir.path())
-            .run()?;
+        git_repo.sb.git(["add", path]);
+        git_repo.sb.git(["commit", "-m", "adding file"]);
 
         assert_eq!(
-            git_repo.get_file_contents(&git_repo.dir.join(&path))?,
+            git_repo.get_file_contents(&git_repo.sb.work.join(path))?,
             file_contents.as_bytes()
         );
 
         repo_file.write_str("additional_contents")?;
         assert_eq!(
-            git_repo.get_file_contents(&git_repo.dir.join(&path))?,
+            git_repo.get_file_contents(&git_repo.sb.work.join(path))?,
             file_contents.as_bytes()
         );
 
         assert!(git_repo
-            .get_file_contents(git_repo.dir.path().parent().unwrap())
+            .get_file_contents(git_repo.sb.work.parent().unwrap())
             .is_err());
 
         Ok(())
@@ -460,7 +482,7 @@ mod tests {
     #[rstest]
     fn test_get_file_contents_on_unborn_head(git_repo: Repo) -> Result<()> {
         assert_matches!(
-            git_repo.get_file_contents(&git_repo.dir.join("x")),
+            git_repo.get_file_contents(&git_repo.sb.work.join("x")),
             Err(Error::NotExist(_))
         );
         Ok(())
