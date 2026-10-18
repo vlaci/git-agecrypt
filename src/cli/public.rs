@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 László Vaskó <opensource@vlaci.email>
+//
+// SPDX-License-Identifier: MPL-2.0
+
 use std::path::PathBuf;
 
 use crate::{config::AgeIdentity, config::Validated, ctx::Context, git, git::Repository, Result};

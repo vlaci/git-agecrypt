@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2021 László Vaskó <opensource@vlaci.email>
+
+SPDX-License-Identifier: MPL-2.0
+-->
+
 # git-agecrypt
 
 Git integration usable to store encrypted secrets in the git repository while having the plaintext available in the working tree. An alternative to [git-crypt](https://github.com/AGWA/git-crypt) using [age](https://age-encryption.org) instead of GPG.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 László Vaskó <opensource@vlaci.email>
+//
+// SPDX-License-Identifier: MPL-2.0
+
 use std::{
     fs::File,
     io::{self, Read, Seek, Write},

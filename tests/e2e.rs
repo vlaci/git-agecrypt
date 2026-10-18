@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 László Vaskó <opensource@vlaci.email>
+//
+// SPDX-License-Identifier: MPL-2.0
+
 //! End-to-end tests driving real `git` with the built `git-agecrypt` binary.
 
 use std::{

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 László Vaskó <opensource@vlaci.email>
+//
+// SPDX-License-Identifier: MPL-2.0
+
 use std::path::Path;
 
 const MAGIC: &[u8; 8] = b"GACACHE1";

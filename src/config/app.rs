@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2022 László Vaskó <opensource@vlaci.email>
+//
+// SPDX-License-Identifier: MPL-2.0
+
 use std::{
     collections::HashMap,
     fs, io,
