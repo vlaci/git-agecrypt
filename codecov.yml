@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 László Vaskó <opensource@vlaci.email>
+#
+# SPDX-License-Identifier: MPL-2.0
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 2%
+
+flag_management:
+  default_rules:
+    carryforward: true
+    statuses:
+      - type: project
+        target: auto
+        threshold: 1%

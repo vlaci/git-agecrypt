@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2022 László Vaskó <opensource@vlaci.email>
+//
+// SPDX-License-Identifier: MPL-2.0
+
 use std::{
     collections::HashMap,
     fs, io,
@@ -10,12 +14,6 @@ use serde::{Deserialize, Serialize};
 use crate::age;
 
 use super::Result;
-
-#[derive(Serialize, Deserialize, PartialEq, Eq)]
-pub struct RecipientEntry {
-    paths: Vec<PathBuf>,
-    recipients: Vec<String>,
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct AppConfig {
@@ -72,7 +70,7 @@ impl AppConfig {
         }
         for path in paths {
             let entry = self.config.entry(path).or_default();
-            entry.extend(recipients.clone().into_iter());
+            entry.extend(recipients.clone());
             entry.dedup();
         }
         Ok(())

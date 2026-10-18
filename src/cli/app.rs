@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 László Vaskó <opensource@vlaci.email>
+//
+// SPDX-License-Identifier: MPL-2.0
+
 use anyhow::Result;
 
 use crate::ctx::Context;
@@ -52,6 +56,7 @@ fn run_public_command(commands: PublicCommands, ctx: impl Context) -> Result<()>
                 QueryConfig::Recipients => cmd.list_recipients()?,
             },
         },
+        PublicCommands::Rekey { paths } => cmd.rekey(paths)?,
     }
     Ok(())
 }

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 László Vaskó <opensource@vlaci.email>
+//
+// SPDX-License-Identifier: MPL-2.0
+
 use std::path::PathBuf;
 
 use clap::{ArgGroup, Parser, Subcommand};
@@ -36,6 +40,12 @@ pub enum PublicCommands {
 
     /// Remove repository specific configuration
     Deinit,
+
+    /// Re-encrypt files to the recipients configured
+    Rekey {
+        /// Path to rekey; defaults to all encrypted files
+        paths: Vec<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -107,7 +117,7 @@ pub struct RemoveConfig {
     recipient: Option<Vec<String>>,
 
     /// Path to encrypt for the given recipient
-    #[clap(short, long)]
+    #[clap(short, long, num_args = 1..)]
     path: Option<Vec<PathBuf>>,
 }
 

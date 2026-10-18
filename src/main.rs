@@ -1,4 +1,9 @@
+// SPDX-FileCopyrightText: 2021 László Vaskó <opensource@vlaci.email>
+//
+// SPDX-License-Identifier: MPL-2.0
+
 mod age;
+mod cache;
 mod cli;
 mod config;
 mod ctx;

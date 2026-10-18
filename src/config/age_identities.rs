@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 László Vaskó <opensource@vlaci.email>
+//
+// SPDX-License-Identifier: MPL-2.0
+
 use std::{fmt::Display, path::PathBuf};
 
 use anyhow::Context as AnyhowContext;
@@ -16,7 +20,7 @@ impl TryFrom<PathBuf> for AgeIdentity {
             path: String::from(
                 value
                     .to_str()
-                    .ok_or_else(|| anyhow::anyhow!("Unsupported path {:?}", &value))?,
+                    .ok_or_else(|| anyhow::anyhow!("Unsupported path {:?}", value))?,
             ),
         })
     }
