@@ -66,7 +66,7 @@ impl AppConfig {
         }
         for path in paths {
             let entry = self.config.entry(path).or_default();
-            entry.extend(recipients.clone().into_iter());
+            entry.extend(recipients.clone());
             entry.dedup();
         }
         Ok(())

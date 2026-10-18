@@ -16,7 +16,7 @@ impl TryFrom<PathBuf> for AgeIdentity {
             path: String::from(
                 value
                     .to_str()
-                    .ok_or_else(|| anyhow::anyhow!("Unsupported path {:?}", &value))?,
+                    .ok_or_else(|| anyhow::anyhow!("Unsupported path {:?}", value))?,
             ),
         })
     }
