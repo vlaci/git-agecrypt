@@ -11,12 +11,6 @@ use crate::age;
 
 use super::Result;
 
-#[derive(Serialize, Deserialize, PartialEq, Eq)]
-pub struct RecipientEntry {
-    paths: Vec<PathBuf>,
-    recipients: Vec<String>,
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct AppConfig {
     config: HashMap<PathBuf, Vec<String>>,

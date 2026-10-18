@@ -46,8 +46,6 @@ pub(crate) trait Repository {
 
     fn list_config(&self, key: &str) -> Result<Vec<String>>;
 
-    fn get_config(&self, key: &str) -> Result<String>;
-
     fn set_config(&self, key: &str, value: &str) -> Result<()>;
 
     fn remove_config_section(&self, key: &str) -> Result<()>;
@@ -147,12 +145,6 @@ impl Repository for LibGit2Repository {
         })?;
 
         Ok(entries)
-    }
-
-    fn get_config(&self, key: &str) -> Result<String> {
-        let cfg = self.inner.config()?;
-        cfg.get_string(key)
-            .map_err(|_e| Error::NotExist(key.into()))
     }
 
     fn set_config(&self, key: &str, value: &str) -> Result<()> {
@@ -304,9 +296,6 @@ mod tests {
         assert!(git_repo.contains_config("foo.bar", "foobar"));
         assert!(git_repo.contains_config("foo.bar", "snafu"));
         assert_eq!(git_repo.list_config("foo")?, ["foobar", "snafu"]);
-
-        // Returns the last set config
-        assert_eq!(git_repo.get_config("foo.bar")?, "snafu");
 
         // Set overrides multivalue entries
         git_repo.set_config("foo.bar", "FOOBAR")?;
