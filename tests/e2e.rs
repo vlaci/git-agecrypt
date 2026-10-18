@@ -133,6 +133,19 @@ impl Sandbox {
     fn assert_decrypted_secret(&self) {
         assert_eq!(self.read("secret"), "top secret\n");
     }
+
+    #[track_caller]
+    fn assert_encrypted_to(&self, rev_path: &str, to: &Key, not_to: &Key) {
+        let blob = self.blob(rev_path);
+        assert!(
+            decrypts_with(&blob, to),
+            "{rev_path} should decrypt with the intended key"
+        );
+        assert!(
+            !decrypts_with(&blob, not_to),
+            "{rev_path} should NOT decrypt with the excluded key"
+        );
+    }
 }
 
 fn decrypts_with(blob: &[u8], key: &Key) -> bool {
@@ -185,4 +198,37 @@ fn unrelated_identity_config_keys_are_ignored() {
     fs::remove_file(sb.repo.join("secret")).unwrap();
     sb.assert_run_git(["checkout", "--", "secret"]);
     sb.assert_decrypted_secret();
+}
+
+#[test]
+fn same_stem_and_same_directory_files_keep_their_own_recipients() {
+    let sb = Sandbox::new();
+    let key1 = sb.key("k1");
+    let key2 = sb.key("k2");
+    sb.add_identity(&key1);
+
+    sb.write("a.json", "same\n");
+    sb.write("a.yaml", "same\n");
+    sb.write("conf.d/one", "same\n");
+    sb.write("conf.d/two", "same\n");
+
+    sb.add_recipient(&key1, &["a.json"]);
+    sb.add_recipient(&key2, &["a.yaml"]);
+    sb.add_recipient(&key1, &["conf.d/one"]);
+    sb.add_recipient(&key2, &["conf.d/two"]);
+    sb.set_gitattributes(&["a.json", "a.yaml", "conf.d/one", "conf.d/two"]);
+
+    sb.assert_run_git([
+        "add",
+        ".gitattributes",
+        "git-agecrypt.toml",
+        "a.json",
+        "a.yaml",
+        "conf.d/one",
+        "conf.d/two",
+    ]);
+    sb.assert_run_git(["commit", "-m", "add colliding files"]);
+
+    sb.assert_encrypted_to("HEAD:a.yaml", &key2, &key1);
+    sb.assert_encrypted_to("HEAD:conf.d/two", &key2, &key1);
 }

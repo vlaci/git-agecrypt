@@ -7,7 +7,13 @@ use std::{
 use anyhow::{bail, Result};
 use blake3::Hash;
 
-use crate::{age, ctx::Context, git::Error as GitError, git::Repository};
+use crate::{
+    age,
+    cache::{self, CacheEntry},
+    ctx::Context,
+    git::Error as GitError,
+    git::Repository,
+};
 
 pub(crate) struct CommandContext<C: Context> {
     pub ctx: C,
@@ -18,31 +24,16 @@ impl<C: Context> CommandContext<C> {
         log::info!("Encrypting file");
         let file = self.ctx.repo().workdir().join(file);
 
-        log::debug!("Looking for saved has information. target={:?}", file,);
-        let mut existing_hash = [0u8; 32];
-        if let Some(hash_buffer) = self.ctx.load_sidecar(&file, "hash")? {
-            existing_hash = hash_buffer.as_slice().try_into()?
-        } else {
-            log::debug!("No saved hash file found");
-        }
-
         let mut hasher = blake3::Hasher::new();
         let mut contents = vec![];
         io::stdin().read_to_end(&mut contents)?;
         let hash = hasher.update(&contents).finalize();
 
-        let old_hash = Hash::from(existing_hash);
-        log::debug!(
-            "Comparing hashes for file; old_hash={}, new_hash={:?}",
-            old_hash.to_hex().as_str(),
-            hash.to_hex().as_str()
-        );
-
-        let saved = if hash == old_hash {
-            self.ctx.load_sidecar(&file, "age")?
-        } else {
-            None
-        };
+        let saved = self
+            .ctx
+            .load_cache(&file)?
+            .filter(|e| e.plaintext_hash == *hash.as_bytes())
+            .map(|e| e.ciphertext);
 
         let result = self.get_content(contents, hash, file, saved)?;
         Ok(io::stdout().write_all(&result)?)
@@ -56,7 +47,7 @@ impl<C: Context> CommandContext<C> {
         saved_content: Option<Vec<u8>>,
     ) -> Result<Vec<u8>> {
         if let Some(saved_content) = saved_content {
-            log::debug!("File didn't change since last encryption, loading from git HEAD");
+            log::debug!("File didn't change since last encryption, loading from cache");
             return Ok(saved_content);
         }
 
@@ -76,9 +67,16 @@ impl<C: Context> CommandContext<C> {
             let decrypted = age::decrypt(&identities, &mut cur)?.unwrap_or_default();
             if decrypted == contents {
                 log::debug!("Decrypted content matches, using from working copy");
-                self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
-                self.ctx.store_sidecar(&file, "age", cur.get_ref())?;
-                return Ok(cur.into_inner());
+                let ciphertext = cur.into_inner();
+                self.ctx.store_cache(
+                    &file,
+                    &CacheEntry {
+                        plaintext_hash: *hash.as_bytes(),
+                        recipients: cache::UNKNOWN_RECIPIENTS,
+                        ciphertext: ciphertext.clone(),
+                    },
+                )?;
+                return Ok(ciphertext);
             }
         }
 
@@ -88,8 +86,14 @@ impl<C: Context> CommandContext<C> {
         let public_keys = cfg.get_public_keys(&file)?;
 
         let res = age::encrypt(public_keys, &mut &contents[..])?;
-        self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
-        self.ctx.store_sidecar(&file, "age", &res)?;
+        self.ctx.store_cache(
+            &file,
+            &CacheEntry {
+                plaintext_hash: *hash.as_bytes(),
+                recipients: cache::UNKNOWN_RECIPIENTS,
+                ciphertext: res.clone(),
+            },
+        )?;
         Ok(res)
     }
 
@@ -122,9 +126,15 @@ impl<C: Context> CommandContext<C> {
             let mut hasher = blake3::Hasher::new();
             let hash = hasher.update(&rv).finalize();
 
-            log::debug!("Storing hash for file; hash={:?}", hash.to_hex().as_str(),);
-            self.ctx.store_sidecar(&file, "hash", hash.as_bytes())?;
-            self.ctx.store_sidecar(&file, "age", cur.get_ref())?;
+            log::debug!("Storing hash for file; hash={:?}", hash.to_hex().as_str());
+            self.ctx.store_cache(
+                &file,
+                &CacheEntry {
+                    plaintext_hash: *hash.as_bytes(),
+                    recipients: cache::UNKNOWN_RECIPIENTS,
+                    ciphertext: cur.into_inner(),
+                },
+            )?;
 
             Ok(io::stdout().write_all(&rv)?)
         } else {

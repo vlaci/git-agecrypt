@@ -1,4 +1,5 @@
 mod age;
+mod cache;
 mod cli;
 mod config;
 mod ctx;
