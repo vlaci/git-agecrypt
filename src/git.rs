@@ -489,47 +489,71 @@ mod tests {
     }
 
     #[rstest]
-    fn test_config(git_repo: Repo) -> Result<()> {
-        // At first there are no values for the "foo.bar" key
+    fn test_unset_key_has_no_values(git_repo: Repo) -> Result<()> {
         assert_eq!(git_repo.list_config("foo.bar")?, [] as [String; 0]);
         assert!(!git_repo.contains_config("foo.bar", "foobar"));
+        Ok(())
+    }
 
+    #[rstest]
+    fn test_set_config_rejects_invalid_key(git_repo: Repo) {
         assert_matches!(git_repo.set_config("invalidkey", "foobar"), Err(_));
+    }
 
-        // Both of these are added to the config
+    #[rstest]
+    fn test_list_config_returns_all_values_of_exact_key(git_repo: Repo) -> Result<()> {
         git_repo.set_config("foo.bar", "foobar")?;
         git_repo.add_config("foo.bar", "snafu")?;
         git_repo.set_config("foo.barx", "other")?;
 
         assert!(git_repo.contains_config("foo.bar", "foobar"));
         assert!(git_repo.contains_config("foo.bar", "snafu"));
-        // Keys sharing a prefix are not listed
         assert_eq!(git_repo.list_config("foo.bar")?, ["foobar", "snafu"]);
+        Ok(())
+    }
 
-        // Set overrides multivalue entries
+    #[rstest]
+    fn test_set_config_replaces_all_values(git_repo: Repo) -> Result<()> {
+        git_repo.set_config("foo.bar", "foobar")?;
+        git_repo.add_config("foo.bar", "snafu")?;
+
         git_repo.set_config("foo.bar", "FOOBAR")?;
 
         assert!(git_repo.contains_config("foo.bar", "FOOBAR"));
         assert_eq!(git_repo.list_config("foo.bar")?, ["FOOBAR"]);
+        Ok(())
+    }
 
+    #[rstest]
+    fn test_add_config_rejects_duplicate_value(git_repo: Repo) -> Result<()> {
         git_repo.set_config("foo.bar", "foobar")?;
 
-        // Duplicate value cannot be added
         assert_matches!(
             git_repo.add_config("foo.bar", "foobar"),
             Err(Error::AlreadyExists(value)) if value == "foobar"
         );
+        Ok(())
+    }
 
+    #[rstest]
+    fn test_remove_config_rejects_absent_value(git_repo: Repo) -> Result<()> {
+        git_repo.set_config("foo.bar", "foobar")?;
         git_repo.remove_config("foo.bar", "foobar")?;
 
-        // Absent value cannot be removed
         assert_matches!(
-            git_repo.remove_config("foo.bar", "foobar"), Err(Error::NotExist(value)) if value == "foobar"
+            git_repo.remove_config("foo.bar", "foobar"),
+            Err(Error::NotExist(value)) if value == "foobar"
         );
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_remove_config_section_removes_its_keys(git_repo: Repo) -> Result<()> {
+        git_repo.set_config("foo.bar", "foobar")?;
+        git_repo.set_config("foo.barx", "other")?;
 
         assert_matches!(git_repo.remove_config_section("foo"), Ok(()));
         assert_eq!(git_repo.list_config("foo.bar")?, [] as [String; 0]);
-
         Ok(())
     }
 }
