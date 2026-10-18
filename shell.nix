@@ -1,16 +1,18 @@
-{ pkgs ? import <nixpkgs> { } }:
+{
+  pkgs ? import <nixpkgs> { },
+}:
 
 with pkgs;
 mkShell {
   nativeBuildInputs = [ pkg-config ];
   buildInputs = [
-    openssl.dev
-    clang
-    gdb
-    lldb
-    just
-    grcov
     cargo-limit
     cargo-watch
+    clang
+    gdb
+    grcov
+    just
+    lldb
+    openssl.dev
   ];
 }
