@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  Nix:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            arch: x86_64-linux
+          - os: ubuntu-24.04-arm
+            arch: aarch64-linux
+          - os: macos-26
+            arch: aarch64-darwin
+    name: Build Nix - ${{ matrix.arch }}.${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: vlaci
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Pre-Commit
+        if: ${{ matrix.arch == 'x86_64-linux' }}
+        run: |
+          source <(nix print-dev-env)
+          nix fmt
+      - name: Nix Flake checks
+        run: |
+          nix flake check \
+              --keep-going \
+              --print-build-logs
+      - name: Code coverage
+        if: ${{ matrix.arch == 'x86_64-linux' }}
+        run: nix build .#checks.${{ matrix.arch }}.test-coverage -o cargo-test
+      - uses: codecov/codecov-action@v7
+        if: ${{ matrix.arch == 'x86_64-linux' }}
+        with:
+          flags: cargo-test
+          files: cargo-test/coverage.codecov
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  release:
+    name: Release
+    needs: [Nix]
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-24.04
+    environment: crates-io
+    permissions:
+      # Used to create the GitHub Release
+      contents: write
+      # Used to exchange the OIDC token for a crates.io publish token
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: vlaci
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Check version and extract release notes
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=${GITHUB_REF_NAME#v}
+          crate=$(nix eval --raw .#packages.x86_64-linux.default.pname)
+          cargo_version=$(nix eval --raw .#packages.x86_64-linux.default.version)
+          if [[ "$version" != "$cargo_version" ]]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version $cargo_version"
+            exit 1
+          fi
+
+          # index() rather than a regex, so the dots in the version match literally.
+          awk -v h="## [$version]" 'index($0, h) == 1 {found=1; next} found && /^## \[/ {exit} found {print}' \
+            CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::CHANGELOG.md has no \"## [$version]\" section"
+            exit 1
+          fi
+
+          # crates.io rejects API requests without a User-Agent.
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -A 'git-agecrypt release workflow (https://github.com/vlaci/git-agecrypt)' \
+            "https://crates.io/api/v1/crates/$crate/$version")
+          case "$status" in
+            200) published=true ;;
+            404) published=false ;;
+            *)
+              echo "::error::unexpected HTTP $status from crates.io for $crate $version"
+              exit 1
+              ;;
+          esac
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+        if: ${{ steps.meta.outputs.published == 'false' }}
+      - name: Publish to crates.io
+        if: ${{ steps.meta.outputs.published == 'false' }}
+        run: nix develop --command cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+          fi
