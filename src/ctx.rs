@@ -18,11 +18,7 @@ pub(crate) trait Context {
 
     fn store_sidecar(&self, for_path: &Path, extension: &str, content: &[u8]) -> Result<()>;
 
-    fn load_sidecar(
-        &self,
-        for_path: &Path,
-        extension: &str,
-    ) -> Result<Option<Vec<u8>>>;
+    fn load_sidecar(&self, for_path: &Path, extension: &str) -> Result<Option<Vec<u8>>>;
 
     fn current_exe(&self) -> Result<String>;
 
@@ -70,11 +66,7 @@ impl<R: git::Repository> Context for ContextWrapper<R> {
         Ok(())
     }
 
-    fn load_sidecar(
-        &self,
-        for_path: &Path,
-        extension: &str,
-    ) -> Result<Option<Vec<u8>>> {
+    fn load_sidecar(&self, for_path: &Path, extension: &str) -> Result<Option<Vec<u8>>> {
         let sidecar_path = self.get_sidecar(for_path, extension)?;
         match File::open(sidecar_path) {
             Ok(mut f) => {

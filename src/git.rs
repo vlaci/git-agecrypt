@@ -94,10 +94,9 @@ impl Repository for LibGit2Repository {
             .peel_to_tree()?
             .get_path(relpath)
             .map_err(|e| match e.code() {
-                git2::ErrorCode::NotFound => Error::NotExist(format!(
-                    "Path {} is not found in HEAD",
-                    relpath.display(),
-                )),
+                git2::ErrorCode::NotFound => {
+                    Error::NotExist(format!("Path {} is not found in HEAD", relpath.display(),))
+                }
                 _ => Error::Other(e.into()),
             })?;
         let contents = entry.to_object(&self.inner)?;

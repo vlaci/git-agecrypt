@@ -1,5 +1,5 @@
 use std::{
-    io::{self, Read, ErrorKind as IoErrorKind},
+    io::{self, ErrorKind as IoErrorKind, Read},
     path::Path,
 };
 
@@ -103,6 +103,10 @@ pub(crate) fn validate_public_keys(public_keys: &[impl AsRef<str>]) -> Result<()
 
 pub(crate) fn validate_identity(identity: impl AsRef<Path>) -> Result<()> {
     let mut stdin_guard = StdinGuard::new(false);
-    read_identities(vec![identity.as_ref().to_string_lossy().into()], None, &mut stdin_guard)?;
+    read_identities(
+        vec![identity.as_ref().to_string_lossy().into()],
+        None,
+        &mut stdin_guard,
+    )?;
     Ok(())
 }
