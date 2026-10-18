@@ -59,7 +59,15 @@ I have written this to have a more portable and easy to set up alternative to `g
 
     If the cache was lost, or the repository was cloned with globally configured filters, run `git-agecrypt rekey` instead to force re-encryption of the affected files.
 
-    Old blobs in history stay readable by removed recipients; rotate the secret itself to revoke access.
+> [!CAUTION]
+> Removing a recipient only affects commits made afterwards. Older blobs in git history stay readable by that recipient.
+> Rewriting history does not guarantee that data will be ever prunes from forks, local clones, provider backups, etc.
+>
+> The same applies to a leaked identity: age has no forward secrecy, so a recipient can decrypt every blob ever encrypted for it.
+>
+> In both cases, the data is compromised.
+>
+> [I told you so.](#why-should-i-use-this)
 
 ## Behind the scenes
 
