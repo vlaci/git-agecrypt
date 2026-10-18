@@ -41,6 +41,10 @@ where
     pub fn new(ctx: &'a C, ns: String) -> Self {
         Self { ctx, ns }
     }
+
+    fn key(&self) -> String {
+        format!("{}.{}", CONFIG_PATH, self.ns)
+    }
 }
 
 impl From<crate::git::Error> for super::Error {
@@ -60,15 +64,12 @@ where
     type Item = GitConfigEntry;
 
     fn add(&mut self, item: Self::Item) -> Result<()> {
-        let entry_name = format!("{}.{}", CONFIG_PATH, self.ns);
-        self.ctx.repo().add_config(&entry_name, &item.value)?;
+        self.ctx.repo().add_config(&self.key(), &item.value)?;
         Ok(())
     }
 
     fn remove(&mut self, item: Self::Item) -> Result<()> {
-        let entry_name = format!("{}.{}", CONFIG_PATH, self.ns);
-
-        self.ctx.repo().remove_config(&entry_name, &item.value)?;
+        self.ctx.repo().remove_config(&self.key(), &item.value)?;
         Ok(())
     }
 
@@ -76,7 +77,7 @@ where
         Ok(self
             .ctx
             .repo()
-            .list_config(&self.ns)?
+            .list_config(&self.key())?
             .into_iter()
             .map(GitConfigEntry::new)
             .collect())

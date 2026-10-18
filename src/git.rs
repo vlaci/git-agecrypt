@@ -155,11 +155,17 @@ impl Repository for LibGit2Repository {
         let cfg = self.inner.config()?;
         let mut entries = Vec::new();
 
-        cfg.entries(Some(key))?.for_each(|e| {
-            if let Some(v) = e.value() {
-                entries.push(v.into())
+        match cfg.multivar(key, None) {
+            Ok(entry_iter) => {
+                entry_iter.for_each(|e| {
+                    if let Some(v) = e.value() {
+                        entries.push(v.into())
+                    }
+                })?;
             }
-        })?;
+            Err(e) if e.code() == git2::ErrorCode::NotFound => {}
+            Err(e) => return Err(Error::Other(anyhow!(e))),
+        };
 
         Ok(entries)
     }
@@ -309,8 +315,8 @@ mod tests {
 
     #[rstest]
     fn test_config(git_repo: Repo) -> Result<()> {
-        // At first there are no entries under the "foo" section
-        assert_eq!(git_repo.list_config("foo")?, [] as [String; 0]);
+        // At first there are no values for the "foo.bar" key
+        assert_eq!(git_repo.list_config("foo.bar")?, [] as [String; 0]);
         assert!(!git_repo.contains_config("foo.bar", "foobar"));
 
         assert_matches!(git_repo.set_config("invalidkey", "foobar"), Err(_));
@@ -318,16 +324,18 @@ mod tests {
         // Both of these are added to the config
         git_repo.set_config("foo.bar", "foobar")?;
         git_repo.add_config("foo.bar", "snafu")?;
+        git_repo.set_config("foo.barx", "other")?;
 
         assert!(git_repo.contains_config("foo.bar", "foobar"));
         assert!(git_repo.contains_config("foo.bar", "snafu"));
-        assert_eq!(git_repo.list_config("foo")?, ["foobar", "snafu"]);
+        // Keys sharing a prefix are not listed
+        assert_eq!(git_repo.list_config("foo.bar")?, ["foobar", "snafu"]);
 
         // Set overrides multivalue entries
         git_repo.set_config("foo.bar", "FOOBAR")?;
 
         assert!(git_repo.contains_config("foo.bar", "FOOBAR"));
-        assert_eq!(git_repo.list_config("foo")?, ["FOOBAR"]);
+        assert_eq!(git_repo.list_config("foo.bar")?, ["FOOBAR"]);
 
         git_repo.set_config("foo.bar", "foobar")?;
 
@@ -345,7 +353,7 @@ mod tests {
         );
 
         assert_matches!(git_repo.remove_config_section("foo"), Ok(()));
-        assert_eq!(git_repo.list_config("foo")?, [] as [String; 0]);
+        assert_eq!(git_repo.list_config("foo.bar")?, [] as [String; 0]);
 
         Ok(())
     }

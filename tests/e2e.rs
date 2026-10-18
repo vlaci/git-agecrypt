@@ -170,3 +170,19 @@ fn first_add_on_unborn_branch_succeeds() {
 
     assert!(sb.blob("HEAD:secret").starts_with(b"age-encryption.org/v1"));
 }
+
+#[test]
+fn unrelated_identity_config_keys_are_ignored() {
+    let sb = Sandbox::new();
+    // Keys that merely contain "identity" in their name must not be read as age identities.
+    sb.assert_run_git(["config", "--global", "advice.implicitIdentity", "false"]);
+    sb.assert_run_git(["config", "user.signingidentity", "foo"]);
+
+    let key = sb.key("k1");
+    sb.add_identity(&key);
+    sb.commit_secret(&key);
+
+    fs::remove_file(sb.repo.join("secret")).unwrap();
+    sb.assert_run_git(["checkout", "--", "secret"]);
+    sb.assert_decrypted_secret();
+}

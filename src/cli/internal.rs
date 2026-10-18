@@ -95,7 +95,13 @@ impl<C: Context> CommandContext<C> {
 
     fn get_identities(&self) -> Result<Vec<String>> {
         log::debug!("Loading identities from config");
-        let all_identities = self.ctx.repo().list_config("identity")?;
+        let all_identities: Vec<String> = self
+            .ctx
+            .age_identities()
+            .list()?
+            .into_iter()
+            .map(|i| i.path)
+            .collect();
         log::debug!(
             "Loaded identities from config; identities='{:?}'",
             all_identities
@@ -129,13 +135,7 @@ impl<C: Context> CommandContext<C> {
     pub(crate) fn textconv(&self, path: impl AsRef<Path>) -> Result<()> {
         log::info!("Decrypting file to show in diff");
 
-        let all_identities: Vec<String> = self
-            .ctx
-            .age_identities()
-            .list()?
-            .into_iter()
-            .map(|i| i.path)
-            .collect();
+        let all_identities = self.get_identities()?;
 
         let mut f = File::open(path)?;
         let result = if let Some(rv) = age::decrypt(&all_identities, &mut f)? {
