@@ -170,6 +170,10 @@ impl Sandbox {
             "{rev_path} should NOT decrypt with the excluded key"
         );
     }
+
+    fn remove_cache(&self) {
+        fs::remove_dir_all(self.repo.join(".git/git-agecrypt")).unwrap();
+    }
 }
 
 fn decrypts_with(blob: &[u8], key: &Key) -> bool {
@@ -295,4 +299,70 @@ fn fresh_clone_renormalize_produces_no_changes() {
     clone
         .assert_run_git(["status", "--porcelain"])
         .stdout_eq("");
+}
+
+#[test]
+fn rekey_reencrypts_after_cache_loss() {
+    let sb = Sandbox::new();
+    let key1 = sb.key("k1");
+    let key2 = sb.key("k2");
+    sb.add_identity(&key1);
+    sb.add_identity(&key2);
+    sb.commit_secret(&key1);
+
+    sb.add_recipient(&key2, &["secret"]);
+    sb.remove_recipient(&key1, &["secret"]);
+
+    sb.remove_cache();
+
+    sb.run_agecrypt()
+        .arg("rekey")
+        .assert()
+        .success()
+        .stdout_eq("Re-encrypted secret\n");
+
+    sb.assert_run_git(["diff", "--cached", "--name-only"])
+        .stdout_eq("secret\n");
+
+    sb.assert_run_git(["commit", "-m", "rekey"]);
+
+    sb.assert_encrypted_to("HEAD:secret", &key2, &key1);
+}
+
+#[test]
+fn rekey_with_path_only_restages_that_path() {
+    let sb = Sandbox::new();
+    let key1 = sb.key("k1");
+    let key2 = sb.key("k2");
+    sb.add_identity(&key1);
+
+    sb.write("s1", "first\n");
+    sb.write("s2", "second\n");
+    sb.add_recipient(&key1, &["s1", "s2"]);
+    sb.set_gitattributes(&["s1", "s2"]);
+    sb.assert_run_git(["add", ".gitattributes", "git-agecrypt.toml", "s1", "s2"]);
+    sb.assert_run_git(["commit", "-m", "two encrypted files"]);
+
+    sb.add_recipient(&key2, &["s1", "s2"]);
+    sb.remove_recipient(&key1, &["s1", "s2"]);
+    sb.remove_cache();
+
+    sb.run_agecrypt()
+        .args(["rekey", "s1"])
+        .assert()
+        .success()
+        .stdout_eq("Re-encrypted s1\n");
+
+    sb.assert_run_git(["diff", "--cached", "--name-only"])
+        .stdout_eq("s1\n");
+}
+
+#[test]
+fn rekey_without_matching_files_fails() {
+    let sb = Sandbox::new();
+    sb.run_agecrypt()
+        .arg("rekey")
+        .assert()
+        .failure()
+        .stderr_eq("Error: No tracked files using the git-agecrypt filter match the given paths\n");
 }

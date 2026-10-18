@@ -36,6 +36,12 @@ pub enum PublicCommands {
 
     /// Remove repository specific configuration
     Deinit,
+
+    /// Re-encrypt files to the recipients configured
+    Rekey {
+        /// Path to rekey; defaults to all encrypted files
+        paths: Vec<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -107,7 +113,7 @@ pub struct RemoveConfig {
     recipient: Option<Vec<String>>,
 
     /// Path to encrypt for the given recipient
-    #[clap(short, long)]
+    #[clap(short, long, num_args = 1..)]
     path: Option<Vec<PathBuf>>,
 }
 

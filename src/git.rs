@@ -49,6 +49,10 @@ pub(crate) trait Repository {
     fn set_config(&self, key: &str, value: &str) -> Result<()>;
 
     fn remove_config_section(&self, key: &str) -> Result<()>;
+
+    fn list_filtered_files(&self, pathspecs: &[PathBuf]) -> Result<Vec<PathBuf>>;
+
+    fn renormalize(&self, paths: &[PathBuf]) -> Result<()>;
 }
 
 pub(crate) struct LibGit2Repository {
@@ -198,6 +202,155 @@ impl Repository for LibGit2Repository {
                 String::from_utf8_lossy(&output.stderr)
             );
             return Err(Error::NotExist(key.into()));
+        }
+        Ok(())
+    }
+
+    fn list_filtered_files(&self, pathspecs: &[PathBuf]) -> Result<Vec<PathBuf>> {
+        // Collect tracked files matching the given pathspecs
+        let ls_output = if pathspecs.is_empty() {
+            let mut cmd = process::Command::new("git");
+            cmd.current_dir(self.workdir()).arg("ls-files").arg("-z");
+            cmd.output()?
+        } else {
+            let mut cmd = process::Command::new("git");
+            cmd.arg("ls-files")
+                .arg("-z")
+                .arg("--full-name")
+                .arg("--error-unmatch")
+                .arg("--");
+            for p in pathspecs {
+                cmd.arg(p);
+            }
+            let output = cmd.output()?;
+            if !output.status.success() {
+                return Err(Error::Other(anyhow::anyhow!(
+                    "git ls-files failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                )));
+            }
+            output
+        };
+
+        let paths: Vec<PathBuf> = ls_output
+            .stdout
+            .split(|&b| b == 0)
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::ffi::OsStrExt;
+                    Ok(PathBuf::from(std::ffi::OsStr::from_bytes(s)))
+                }
+                #[cfg(not(unix))]
+                {
+                    let s = String::from_utf8(s.to_vec())
+                        .map_err(|e| Error::Other(anyhow::anyhow!("Non-UTF-8 path: {e}")))?;
+                    Ok(PathBuf::from(s))
+                }
+            })
+            .collect::<std::result::Result<Vec<_>, Error>>()?;
+
+        if paths.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Filter to only those with the git-agecrypt filter attribute
+        let mut child = process::Command::new("git")
+            .current_dir(self.workdir())
+            .arg("check-attr")
+            .arg("--stdin")
+            .arg("-z")
+            .arg("filter")
+            .stdin(process::Stdio::piped())
+            .stdout(process::Stdio::piped())
+            .stderr(process::Stdio::inherit())
+            .spawn()?;
+
+        let mut stdin = child.stdin.take().unwrap();
+        let handle = std::thread::spawn(move || -> std::io::Result<()> {
+            use std::io::Write;
+            for p in &paths {
+                let mut buf = Vec::new();
+                #[cfg(unix)]
+                {
+                    use std::os::unix::ffi::OsStrExt;
+                    buf.extend_from_slice(p.as_os_str().as_bytes());
+                }
+                #[cfg(not(unix))]
+                {
+                    let s = p.to_string_lossy();
+                    buf.extend_from_slice(s.as_bytes());
+                }
+                buf.push(0);
+                stdin.write_all(&buf)?;
+            }
+            Ok(())
+        });
+
+        let output = child.wait_with_output()?;
+        handle
+            .join()
+            .map_err(|_| Error::Other(anyhow::anyhow!("write thread panicked")))??;
+
+        // Parse triples: path\0attr\0value\0
+        let stdout = output.stdout;
+        let mut filtered = Vec::new();
+        let mut i = 0;
+        while i + 2 < stdout.len() {
+            let path_end = stdout[i..]
+                .iter()
+                .position(|&b| b == 0)
+                .unwrap_or(stdout.len() - i);
+            let attr_start = i + path_end + 1;
+            let attr_end = stdout[attr_start..]
+                .iter()
+                .position(|&b| b == 0)
+                .unwrap_or(stdout.len() - attr_start);
+            let val_start = attr_start + attr_end + 1;
+            let val_end = stdout[val_start..]
+                .iter()
+                .position(|&b| b == 0)
+                .unwrap_or(stdout.len() - val_start);
+
+            let value = &stdout[val_start..val_start + val_end];
+            if value == b"git-agecrypt" {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::ffi::OsStrExt;
+                    filtered.push(PathBuf::from(std::ffi::OsStr::from_bytes(
+                        &stdout[i..i + path_end],
+                    )));
+                }
+                #[cfg(not(unix))]
+                {
+                    filtered.push(PathBuf::from(
+                        String::from_utf8_lossy(&stdout[i..i + path_end]).as_ref(),
+                    ));
+                }
+            }
+
+            i = val_start + val_end + 1;
+        }
+
+        Ok(filtered)
+    }
+
+    fn renormalize(&self, paths: &[PathBuf]) -> Result<()> {
+        let mut cmd = process::Command::new("git");
+        cmd.current_dir(self.workdir())
+            .arg("--literal-pathspecs")
+            .arg("add")
+            .arg("--renormalize")
+            .arg("--");
+        for p in paths {
+            cmd.arg(p);
+        }
+        let status = cmd.status()?;
+        if !status.success() {
+            return Err(Error::Other(anyhow::anyhow!(
+                "git add --renormalize failed with {status}"
+            )));
         }
         Ok(())
     }

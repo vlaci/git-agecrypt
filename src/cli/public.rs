@@ -1,10 +1,6 @@
 use std::path::PathBuf;
 
-use crate::{git, Result};
-
-use crate::config::Validated;
-use crate::git::Repository;
-use crate::{config::AgeIdentity, ctx::Context};
+use crate::{config::AgeIdentity, config::Validated, ctx::Context, git, git::Repository, Result};
 
 pub(crate) struct CommandContext<C: Context> {
     ctx: C,
@@ -61,6 +57,25 @@ impl<C: Context> CommandContext<C> {
         self.ctx
             .age_identities()
             .remove(AgeIdentity::try_from(identity)?)?;
+        Ok(())
+    }
+
+    pub(crate) fn rekey(&self, paths: Vec<PathBuf>) -> Result<()> {
+        let repo = self.ctx.repo();
+        let targets = repo.list_filtered_files(&paths)?;
+        if targets.is_empty() {
+            anyhow::bail!("No tracked files using the git-agecrypt filter match the given paths");
+        }
+        for rel in &targets {
+            self.ctx.store_cache(
+                &repo.workdir().join(rel),
+                &crate::cache::CacheEntry::force_reencrypt(),
+            )?;
+        }
+        repo.renormalize(&targets)?;
+        for rel in &targets {
+            println!("Re-encrypted {}", rel.display());
+        }
         Ok(())
     }
 

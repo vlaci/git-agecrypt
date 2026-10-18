@@ -52,6 +52,7 @@ fn run_public_command(commands: PublicCommands, ctx: impl Context) -> Result<()>
                 QueryConfig::Recipients => cmd.list_recipients()?,
             },
         },
+        PublicCommands::Rekey { paths } => cmd.rekey(paths)?,
     }
     Ok(())
 }
